@@ -1,3 +1,5 @@
+namespace Domain.Entities;
+
 /// <summary>
 /// Представляет сущность сгенерированного отчета (PDF, Excel).
 /// </summary>

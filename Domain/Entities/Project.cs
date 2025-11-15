@@ -1,4 +1,6 @@
-using DefaultNamespace;
+using Domain.Enums;
+
+namespace Domain.Entities;
 
 /// <summary>
 /// Представляет сущность проекта, содержащую основные данные.

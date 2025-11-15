@@ -1,4 +1,6 @@
-using DefaultNamespace;
+using Domain.Enums;
+
+namespace Domain.Entities;
 
 /// <summary>
 /// Представляет сущность этапа, связанного с конкретным проектом.

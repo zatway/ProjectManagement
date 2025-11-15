@@ -1,3 +1,5 @@
+namespace Domain.Entities;
+
 /// <summary>
 /// Представляет сущность уведомления для реал-тайм системы SignalR.
 /// </summary>

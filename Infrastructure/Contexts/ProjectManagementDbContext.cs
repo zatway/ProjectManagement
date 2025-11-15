@@ -1,7 +1,8 @@
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 /// <summary>
-/// Контекст базы данных для управления проектами.
+/// Контекст базы данных для управления проектами
 /// </summary>
 public class ProjectManagementDbContext : DbContext
 {

@@ -1,3 +1,7 @@
+using Domain.Enums;
+
+namespace Domain.Entities;
+
 /// <summary>
 /// Представляет сущность пользователя системы.
 /// Используется для аутентификации и авторизации (Администратор/Специалист).
@@ -22,7 +26,7 @@ public class User
     /// <summary>
     /// Роль пользователя (например, "Administrator" или "Specialist").
     /// </summary>
-    public string Role { get; set; }
+    public UserRole Role { get; set; }
 
     /// <summary>
     /// Полное имя пользователя.
