@@ -50,6 +50,7 @@ public class Project
     /// Текущий статус проекта.
     /// </summary>
     public ProjectStatus Status { get; set; }
+    
     /// <summary>
     /// Идентификатор пользователя, создавшего этот проект.
     /// </summary>
