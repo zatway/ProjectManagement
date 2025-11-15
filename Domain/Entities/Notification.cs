@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Domain.Entities;
 
 /// <summary>
@@ -8,11 +10,13 @@ public class Notification
     /// <summary>
     /// Уникальный идентификатор уведомления (Primary Key).
     /// </summary>
+    [Key]
     public int NotificationId { get; set; }
 
     /// <summary>
     /// Идентификатор пользователя-получателя (Foreign Key).
     /// </summary>
+    [Required]
     public int UserId { get; set; }
 
     /// <summary>
@@ -23,7 +27,9 @@ public class Notification
     /// <summary>
     /// Текст уведомления (например, "Дедлайн по этапу X приближается").
     /// </summary>
-    public string Message { get; set; }
+    [Required]
+    [StringLength(255)]
+    public string Message { get; set; } = String.Empty;
 
     /// <summary>
     /// Статус прочтения уведомления.
@@ -33,7 +39,7 @@ public class Notification
     /// <summary>
     /// Дата и время создания уведомления.
     /// </summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     // Навигационные свойства для связи
     

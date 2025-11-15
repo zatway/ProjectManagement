@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Domain.Enums;
 
 namespace Domain.Entities;
@@ -10,39 +12,46 @@ public class Project
     /// <summary>
     /// Уникальный идентификатор проекта (Primary Key).
     /// </summary>
+    [Key]
     public int ProjectId { get; set; }
 
     /// <summary>
     /// Название проекта. Должно быть уникальным.
     /// </summary>
-    public string Name { get; set; }
+    [Required]
+    [StringLength(100)]
+    public string Name { get; set; } = String.Empty;
 
     /// <summary>
     /// Подробное описание проекта.
     /// </summary>
-    public string Description { get; set; }
+    [Required]
+    [StringLength(255)]
+    public string Description { get; set; }  = String.Empty;
 
     /// <summary>
-    /// Бюджет проекта. Требуется валидация: должно быть больше нуля.
+    /// Бюджет проекта.
     /// </summary>
+    [Required]
+    [Column(TypeName = "numeric(10, 2)")]
     public decimal Budget { get; set; }
 
     /// <summary>
-    /// Планируемая дата начала проекта (YYYY-MM-DD).
+    /// Планируемая дата начала проекта.
     /// </summary>
     public DateTime StartDate { get; set; }
 
     /// <summary>
-    /// Планируемая дата завершения проекта (YYYY-MM-DD).
+    /// Планируемая дата завершения проекта.
     /// </summary>
     public DateTime EndDate { get; set; }
 
     /// <summary>
-    /// Текущий статус проекта (например, "Active", "Completed").
+    /// Текущий статус проекта.
     /// </summary>
     public ProjectStatus Status { get; set; }
     /// <summary>
-    /// Идентификатор пользователя, создавшего этот проект (Foreign Key).
+    /// Идентификатор пользователя, создавшего этот проект.
     /// </summary>
     public int CreatedByUserId { get; set; }
     
@@ -50,11 +59,9 @@ public class Project
     /// Дата и время создания записи проекта.
     /// </summary>
     public DateTime CreatedAt { get; set; }
-
-    // Навигационные свойства для связи
     
     /// <summary>
-    /// Пользователь, создавший проект (Навигационное свойство).
+    /// Пользователь, создавший проект.
     /// </summary>
     public User CreatedBy { get; set; }
 

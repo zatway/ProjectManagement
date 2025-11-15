@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Domain.Enums;
 
 namespace Domain.Entities;
@@ -10,6 +11,7 @@ public class Stage
     /// <summary>
     /// Уникальный идентификатор этапа
     /// </summary>
+    [Key]
     public int StageId { get; set; }
 
     /// <summary>
@@ -20,6 +22,8 @@ public class Stage
     /// <summary>
     /// Название этапа
     /// </summary>
+    [Required]
+    [StringLength(100)]
     public string Name { get; set; }
 
     /// <summary>
@@ -28,14 +32,14 @@ public class Stage
     public StageType StageType { get; set; }
 
     /// <summary>
-    /// Крайний срок выполнения этапа (дедлайн)
+    /// Крайний срок выполнения этапа
     /// </summary>
     public DateTime Deadline { get; set; }
 
     /// <summary>
     /// Процент выполнения этапа (от 0 до 100)
     /// </summary>
-    public int ProgressPercent { get; set; }
+    public float ProgressPercent { get; set; }
 
     /// <summary>
     /// Статус выполнения этапа
