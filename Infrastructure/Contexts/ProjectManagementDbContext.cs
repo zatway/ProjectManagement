@@ -41,20 +41,16 @@ public class ProjectManagementDbContext : DbContext
 
         // 3. Связи для Stage
         modelBuilder.Entity<Stage>()
-            .HasOne(s => s.Project) 
-            .WithMany(p => p.Stages) 
+            .HasOne(s => s.Project)
+            .WithMany(p => p.Stages)
             .HasForeignKey(s => s.ProjectId)
-            .OnDelete(DeleteBehavior.Cascade)// При удалении проекта удаляются и все его этапы
-            .Property(s => s.StageType)
-            .HasConversion<string>(); // Храним Enum как строку
-        
+            .OnDelete(DeleteBehavior.Cascade);// При удалении проекта удаляются и все его этапы
+
         modelBuilder.Entity<Stage>()
-            .HasOne(s => s.Specialist) 
-            .WithMany(u => u.AssignedStages) 
+            .HasOne(s => s.Specialist)
+            .WithMany(u => u.AssignedStages)
             .HasForeignKey(s => s.SpecialistUserId)
-            .OnDelete(DeleteBehavior.Restrict)
-            .Property(s => s.StageType)
-            .HasConversion<string>();
+            .OnDelete(DeleteBehavior.Restrict);
 
         // 4. Связи для Report
         modelBuilder.Entity<Report>()

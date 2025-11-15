@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "ynWOkWsPBrk=",
+  "success": true,
+  "projectFilePath": "C:\\work\\OKEI\\ProjectManagement\\1\\1.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\zatway\\.nuget\\packages\\microsoft.net.sdk.compilers.toolset\\9.0.304\\microsoft.net.sdk.compilers.toolset.9.0.304.nupkg.sha512"
+  ],
+  "logs": []
+}

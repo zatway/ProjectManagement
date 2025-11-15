@@ -1,19 +1,19 @@
 namespace DefaultNamespace;
 
-public class ReportType
+public enum ReportType
 {
     /// <summary>
-    /// PDF-отчет по шаблону ГОСТ (Акт).
+    /// PDF-отчет по шаблону ГОСТ (Акт)
     /// </summary>
     PdfAct,
     
     /// <summary>
-    /// PDF-отчет по шаблону ГОСТ (Протокол).
+    /// PDF-отчет по шаблону ГОСТ (Протокол)
     /// </summary>
     PdfProtocol,
     
     /// <summary>
-    /// Экспорт данных в Excel для KPI.
+    /// Экспорт данных в Excel для KPI
     /// </summary>
     ExcelKpi
 }

@@ -1,24 +1,24 @@
 namespace DefaultNamespace;
 
-public class StageType
+public enum StageType
 {
     /// <summary>
-    /// Изыскательские работы.
+    /// Изыскательские работы
     /// </summary>
     Exploration,
     
     /// <summary>
-    /// Проектирование.
+    /// Проектирование
     /// </summary>
     Design,
     
     /// <summary>
-    /// Монтажные работы.
+    /// Монтажные работы
     /// </summary>
     Installation,
     
     /// <summary>
-    /// Тестирование и отладка.
+    /// Тестирование и отладка
     /// </summary>
     Testing
 }
