@@ -2,8 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
+using Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,11 +15,10 @@ builder.Services.AddDbContext<ProjectManagementDbContext>(options =>
 {
     // Используем Npgsql для подключения к PostgreSQL
     options.UseNpgsql(connectionString, 
-        // Дополнительные настройки для Npgsql
         b => b.MigrationsAssembly("ProjectManagement.Infrastructure"));
 });
 
-// Настройка JWT Авторизации ---
+// Настройка JWT Авторизации
 var jwtSecretKey = builder.Configuration["Jwt:Key"] ?? 
                    throw new InvalidOperationException("JWT Key is not configured.");
 var issuer = builder.Configuration["Jwt:Issuer"];
@@ -40,6 +41,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 // Настройка контроллеров
 builder.Services.AddControllers();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IJwtService, JwtService>();
 
 // Настройка Swagger
 builder.Services.AddEndpointsApiExplorer();
