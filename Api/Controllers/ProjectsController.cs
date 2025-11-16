@@ -97,7 +97,7 @@ public class ProjectsController : ControllerBase
         }
     }
 
-    [HttpPost("delete/{id}")]
+    [HttpDelete("delete/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(400)]
     public async Task<IActionResult> DeleteProject(int id, CancellationToken cancellationToken)

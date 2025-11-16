@@ -77,7 +77,6 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Если среда разработки - Development (например, при отладке)
 if (app.Environment.IsDevelopment())
 {
     // Используем Swagger и Seed Data
