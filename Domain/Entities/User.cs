@@ -22,6 +22,12 @@ public class User
     /// Хэш пароля пользователя.
     /// </summary>
     public string PasswordHash { get; set; }
+    
+    /// <summary>
+    /// Поля для Refresh Token
+    /// </summary>
+    public string? RefreshToken { get; set; }
+    public DateTime? RefreshTokenExpiryTime { get; set; }
 
     /// <summary>
     /// Роль пользователя (например, "Administrator" или "Specialist").

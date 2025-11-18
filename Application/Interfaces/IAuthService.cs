@@ -9,4 +9,5 @@ public interface IAuthService
     Task<LoginResponse> Login(LoginRequest request, CancellationToken cancellationToken);
 
     Task Register(RegisterRequest request, CancellationToken cancellationToken);
+    Task<LoginResponse> RefreshToken(RefreshTokenRequest request, CancellationToken cancellationToken);
 }

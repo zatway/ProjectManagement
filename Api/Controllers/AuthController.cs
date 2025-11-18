@@ -47,4 +47,20 @@ public class AuthController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
+    
+    [HttpPost("refresh")]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var newTokens = await _authService.RefreshToken(request, cancellationToken);
+            return Ok(newTokens);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(ex.Message);
+        }
+    }
 }

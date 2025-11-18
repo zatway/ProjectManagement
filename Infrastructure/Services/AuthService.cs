@@ -66,7 +66,7 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Неверное имя пользователя или пароль.");
         }
 
-        // 💡 2. Верификация пароля с использованием BCrypt
+        // 💡Верификация пароля с использованием BCrypt
         var isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
 
         if (!isPasswordValid)
@@ -74,16 +74,78 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Неверное имя пользователя или пароль.");
         }
 
-        // 💡 3. Генерация JWT-токена
-        var token = _jwtService.GenerateToken(user.UserId, user.Username, user.Role.ToString());
+        //Генерация и сохранение Refresh Token
+        var refreshToken = GenerateRefreshToken();
         
-        // В реальном проекте здесь генерируется RefreshToken
+        user.RefreshToken = refreshToken;
+        // Срок действия - 7 дней
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7); 
+
+        // Сохранение изменений в БД
+        // EF Core отслеживает user и сгенерирует UPDATE-запрос только для двух полей: RefreshToken и RefreshTokenExpiryTime
+        await _context.SaveChangesAsync(cancellationToken);
+        
+        var token = _jwtService.GenerateToken(user.UserId, user.Username, user.Role.ToString());
         
         return new LoginResponse
         {
             Id = user.UserId,
             Token = token,
-            RefreshToken = "not_implemented" // Пока заглушка
+            RefreshToken = refreshToken
         };
+    }
+    
+    /// <summary>
+    /// Обновляет пару токенов, используя Refresh Token.
+    /// </summary>
+    public async Task<LoginResponse> RefreshToken(RefreshTokenRequest request, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Поиск пользователя по Refresh Token
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.RefreshToken == request.RefreshToken, cancellationToken);
+
+        if (user == null)
+        {
+            // Refresh Token не найден в БД
+            throw new UnauthorizedAccessException("Недействительный или отозванный Refresh Token.");
+        }
+
+        // Проверка срока действия Refresh Token
+        if (user.RefreshTokenExpiryTime <= DateTime.UtcNow)
+        {
+            // Срок действия Refresh Token истек
+            throw new UnauthorizedAccessException("Срок действия Refresh Token истек. Требуется повторный вход.");
+        }
+        
+        // Генерация новой пары токенов
+        var newJwtToken = _jwtService.GenerateToken(user.UserId, user.Username, user.Role.ToString());
+        var newRefreshToken = GenerateRefreshToken(); // Новый Refresh Token
+
+        // Обновление и сохранение в БД (отзыв старого токена)
+        user.RefreshToken = newRefreshToken;
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        // Возврат новой пары токенов
+        return new LoginResponse
+        {
+            Id = user.UserId,
+            Token = newJwtToken,
+            RefreshToken = newRefreshToken
+        };
+    }
+    
+    private string GenerateRefreshToken()
+    {
+        // 💡 Используем безопасный генератор случайных чисел
+        var randomNumber = new byte[32];
+        using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(randomNumber);
+            return Convert.ToBase64String(randomNumber);
+        }
     }
 }
