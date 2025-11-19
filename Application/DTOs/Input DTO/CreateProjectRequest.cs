@@ -14,7 +14,6 @@ public class CreateProjectRequest
 
     public string Description { get; set; } = string.Empty;
     
-
     [Required(ErrorMessage = "Бюджет проекта обязателен.")]
     [Range(0.01, (double)decimal.MaxValue, ErrorMessage = "Бюджет должен быть больше нуля.")]
     public decimal Budget { get; set; }
