@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System;
 using System.Linq;
+using Application.DTOs.Output_DTO.SignalR;
 using Infrastructure.Contexts;
 using Infrastructure.Services; 
 

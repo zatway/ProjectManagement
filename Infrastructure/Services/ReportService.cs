@@ -4,12 +4,9 @@ using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
-using System.IO; 
 using System.Text.Json; 
-using System.Threading;
-using System.Threading.Tasks;
-using System; 
-using System.Linq;
+using Application.DTOs.Output_DTO.SignalR;
+using Application.Interfaces.SignalR;
 using Infrastructure.Contexts;
 using OfficeOpenXml;
 using OfficeOpenXml.Style; 
@@ -17,20 +14,21 @@ using iText.Kernel.Pdf;
 using iText.Layout;
 using iText.Layout.Element; 
 using iText.Layout.Properties;
-using iText.IO.Font;
-using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
 
 namespace Infrastructure.Services;
 
 public class ReportService : IReportService
 {
     private readonly ProjectManagementDbContext _context;
-    private readonly IWebHostEnvironment _environment;
+    private readonly INotificationSender _notificationSender;
+    private readonly IHostEnvironment _environment;
     private readonly string _reportsDirectory;
 
-    public ReportService(ProjectManagementDbContext context, IWebHostEnvironment environment)
+    public ReportService(ProjectManagementDbContext context, IHostEnvironment environment, INotificationSender notificationSender)
     {
         _context = context;
+        _notificationSender = notificationSender;
         _environment = environment;
 
         _reportsDirectory = Path.Combine(_environment.ContentRootPath, "ReportsStorage");
@@ -145,7 +143,6 @@ public class ReportService : IReportService
                 baseFileName = $"{report.Project.Name}_{report.ReportType.ToString()}";
             }
 
-            // Добавляем ID отчета, чтобы гарантировать уникальность
             string fileName = $"{baseFileName}_{report.ReportId}.{fileExtension}";
             
             string fullPath = Path.Combine(_reportsDirectory, fileName);
@@ -154,6 +151,31 @@ public class ReportService : IReportService
 
             report.FilePath = fullPath;
             report.Status = ReportStatus.Complete;
+            
+            var newNotification = new Notification
+            {
+                UserId = report.GeneratedByUserId,
+                ProjectId = report.ProjectId,
+                Message = $"Отчет '{report.ReportType.ToString()}' по проекту '{report.Project.Name}' готов к скачиванию.",
+                CreatedAt = DateTime.UtcNow
+            };
+            await _context.Notifications.AddAsync(newNotification);
+            await _context.SaveChangesAsync();
+
+            var notificationDto = new NotificationResponse 
+            {
+                NotificationId = newNotification.NotificationId,
+                UserId = newNotification.UserId,
+                ProjectId = newNotification.ProjectId,
+                ProjectName = report.Project.Name,
+                Message = newNotification.Message,
+                IsRead = newNotification.IsRead,
+                CreatedAt = newNotification.CreatedAt
+            };
+
+            await _notificationSender.SendReportCompleteNotificationAsync(
+                newNotification.UserId, 
+                notificationDto);
         }
         catch (Exception ex)
         {

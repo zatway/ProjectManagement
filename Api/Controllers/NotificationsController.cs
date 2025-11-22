@@ -3,6 +3,7 @@ using Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Application.DTOs.Output_DTO.SignalR;
 
 namespace Api.Controllers;
 

@@ -1,4 +1,5 @@
 using Application.DTOs.Output_DTO;
+using Application.DTOs.Output_DTO.SignalR;
 
 namespace Application.Interfaces;
 

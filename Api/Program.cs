@@ -7,20 +7,25 @@ using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Contexts;
 using Infrastructure.Services;
+using Api.Hubs;
+using Application.Interfaces.SignalR;
+using Infrastructure.Services.SignalR;
+using Infrastructure.SignalR.Hubs;
+using Microsoft.AspNetCore.SignalR; // 💡 Добавляем пространство имен для SignalR Hub
 
 var builder = WebApplication.CreateBuilder(args);
 
+// --- 1. Настройка Подключения к БД ---
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
 builder.Services.AddDbContext<ProjectManagementDbContext>(options =>
 {
-    // Используем Npgsql для подключения к PostgreSQL
-    options.UseNpgsql(connectionString, 
+    options.UseNpgsql(connectionString,
         b => b.MigrationsAssembly("ProjectManagement.Infrastructure"));
 });
 
-// Настройка JWT Авторизации
-var jwtSecretKey = builder.Configuration["Jwt:Key"] ?? 
+// --- 2. Настройка JWT Авторизации ---
+var jwtSecretKey = builder.Configuration["Jwt:Key"] ??
                    throw new InvalidOperationException("JWT Key is not configured.");
 var issuer = builder.Configuration["Jwt:Issuer"];
 var audience = builder.Configuration["Jwt:Audience"];
@@ -34,22 +39,52 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            
+
             ValidIssuer = issuer,
             ValidAudience = audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey))
         };
+
+        // 💡 Настройка для SignalR: Извлекаем токен из Query String (обычно используется для SignalR)
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+
+                // Если запрос идет к Hub'у
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && (path.StartsWithSegments("/hubs/notifications")))
+                {
+                    // Токен добавляется в контекст, чтобы его мог проверить JWT Bearer
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
-// Настройка контроллеров
+
+// Настройка SignalR
+builder.Services.AddSignalR();
+builder.Services.AddScoped(typeof(IHubContext<NotificationHubStub>), sp =>
+{
+    var realContext = sp.GetRequiredService<IHubContext<NotificationHub>>();
+    return (IHubContext<NotificationHubStub>)realContext;
+});
+
 builder.Services.AddControllers();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IProjectService, ProjectService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<INotificationSender, SignalRNotificationSender>();
 
 // Настройка Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    // Добавляем поддержку JWT в Swagger UI
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -71,7 +106,7 @@ builder.Services.AddSwaggerGen(c =>
                     Id = "Bearer"
                 }
             },
-            new string[] {}
+            new string[] { }
         }
     });
 });
@@ -80,23 +115,25 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    // Используем Swagger и Seed Data
     app.UseSwagger();
     app.UseSwaggerUI();
 
-    // 💡 Вызов функции создания базы и добавления базовых данных
-    await SeedDataAsync(app); 
+    // await SeedDataAsync(app);
 }
 
-// Перенаправление HTTP на HTTPS (рекомендуется)
 app.UseHttpsRedirection();
 
-// Важно: Аутентификация должна идти перед Авторизацией
-app.UseAuthentication(); 
-app.UseAuthorization();
+app.UseAuthentication();
 
-// Маппинг контроллеров
-app.MapControllers();
+app.UseRouting();
+
+app.UseEndpoints(endpoints =>
+{
+    endpoints.MapControllers();
+
+    endpoints.MapHub<NotificationHub>("/hubs/notifications");
+});
+
 
 app.Run();
 
@@ -106,28 +143,28 @@ async Task SeedDataAsync(IHost app)
     {
         var services = scope.ServiceProvider;
         var context = services.GetRequiredService<ProjectManagementDbContext>();
-        
-        // Применяем миграции (создаем БД, если она еще не создана)
+
         await context.Database.MigrateAsync();
 
-        // 💡 Создание базовых данных (если нет пользователей)
         if (!context.Users.Any())
         {
             var adminUser = new User
             {
                 Username = "admin",
-                PasswordHash = "hashed_admin_password",
+                PasswordHash =
+                    "$2a$12$Nq5bW2V8d4Dk4vK6v8j0lO/M.yF6zS7E0yH1wP4nZqX.yH1zH0e8c",
                 Role = UserRole.Administrator,
                 FullName = "Администратор системы"
             };
             var specUser = new User
             {
                 Username = "specialist",
-                PasswordHash = "hashed_spec_password",
+                PasswordHash =
+                    "$2a$12$Nq5bW2V8d4Dk4vK6v8j0lO/M.yF6zS7E0yH1wP4nZqX.yH1zH0e8c", // Пример хэша для "password"
                 Role = UserRole.Specialist,
                 FullName = "Специалист по проектам"
             };
-            
+
             context.Users.AddRange(adminUser, specUser);
             await context.SaveChangesAsync();
 
@@ -145,7 +182,6 @@ async Task SeedDataAsync(IHost app)
             context.Projects.Add(testProject);
             await context.SaveChangesAsync();
 
-            // 💡 Создание тестового этапа
             var testStage = new Stage
             {
                 ProjectId = testProject.ProjectId,
@@ -158,7 +194,7 @@ async Task SeedDataAsync(IHost app)
             };
             context.Stages.Add(testStage);
             await context.SaveChangesAsync();
-            
+
             Console.WriteLine("Базовые тестовые данные успешно добавлены.");
         }
     }

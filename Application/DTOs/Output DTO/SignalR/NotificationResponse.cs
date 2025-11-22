@@ -1,10 +1,7 @@
 using System;
 
-namespace Application.DTOs.Output_DTO;
-
-/// <summary>
-/// Полная модель уведомления для передачи на клиент.
-/// </summary>
+namespace Application.DTOs.Output_DTO.SignalR;
+ 
 public class NotificationResponse
 {
     public int NotificationId { get; set; }
