@@ -122,12 +122,14 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+// ВАЖЕН ПОРЯДОК
+app.UseRouting(); 
 
-app.UseAuthentication();
+app.UseAuthentication(); 
 
-app.UseRouting();
+app.UseAuthorization(); 
 
-app.UseEndpoints(endpoints =>
+app.UseEndpoints(endpoints => 
 {
     endpoints.MapControllers();
 

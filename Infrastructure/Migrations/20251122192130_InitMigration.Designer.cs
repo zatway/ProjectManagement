@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(ProjectManagementDbContext))]
-    [Migration("20251122185410_InitMigration")]
+    [Migration("20251122192130_InitMigration")]
     partial class InitMigration
     {
         /// <inheritdoc />
@@ -92,8 +92,9 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("ProjectId");
 
@@ -126,14 +127,16 @@ namespace Infrastructure.Migrations
                     b.Property<string>("ReportConfig")
                         .HasColumnType("text");
 
-                    b.Property<int>("ReportType")
-                        .HasColumnType("integer");
+                    b.Property<string>("ReportType")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<int?>("StageId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("TargetFileName")
                         .HasColumnType("text");
@@ -174,11 +177,13 @@ namespace Infrastructure.Migrations
                     b.Property<int>("SpecialistUserId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("StageType")
-                        .HasColumnType("integer");
+                    b.Property<string>("StageType")
+                        .IsRequired()
+                        .HasColumnType("text");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("StageId");
 
@@ -214,8 +219,9 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime?>("RefreshTokenExpiryTime")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("Role")
-                        .HasColumnType("integer");
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Username")
                         .IsRequired()
