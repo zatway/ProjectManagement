@@ -20,12 +20,12 @@ public class Notification
     public int UserId { get; set; }
 
     /// <summary>
-    /// Идентификатор проекта, связанного с уведомлением (может быть null).
+    /// Идентификатор проекта, связанного с уведомлением.
     /// </summary>
     public int? ProjectId { get; set; }
 
     /// <summary>
-    /// Текст уведомления (например, "Дедлайн по этапу X приближается").
+    /// Текст уведомления.
     /// </summary>
     [Required]
     [StringLength(255)]
