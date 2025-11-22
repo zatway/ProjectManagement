@@ -83,6 +83,34 @@ public class ProjectManagementDbContext(DbContextOptions<ProjectManagementDbCont
             .HasForeignKey(n => n.ProjectId)
             .IsRequired(false)
             .OnDelete(DeleteBehavior.SetNull); // При удалении проекта, ProjectId в уведомлениях становится NULL
+        
+        // User Enums
+        modelBuilder.Entity<User>()
+            .Property(u => u.Role)
+            .HasConversion<string>();
+        
+        // Project Enums
+        modelBuilder.Entity<Project>()
+            .Property(p => p.Status)
+            .HasConversion<string>();
+
+        // Stage Enums
+        modelBuilder.Entity<Stage>()
+            .Property(s => s.StageType)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<Stage>()
+            .Property(s => s.Status)
+            .HasConversion<string>();
+
+        // Report Enums
+        modelBuilder.Entity<Report>()
+            .Property(r => r.ReportType)
+            .HasConversion<string>();
+        
+        modelBuilder.Entity<Report>()
+            .Property(r => r.Status)
+            .HasConversion<string>();
 
         base.OnModelCreating(modelBuilder);
     }

@@ -3,6 +3,7 @@ using Application.DTOs.Output_DTO;
 using Application.Interfaces;
 using BCrypt.Net;
 using Domain.Entities;
+using Domain.Enums;
 using Infrastructure.Contexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,13 +38,20 @@ public class AuthService : IAuthService
             throw new ArgumentException("Пользователь с таким именем уже существует.");
         }
 
+        if (!Enum.TryParse<UserRole>(request.Role, true, out var roleTypeEnum))
+        {
+            throw new ArgumentException(
+                $"Роль '{request.Role}' не является корректным значением для UserRole.");
+        }
+
+
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password, SaltRevision.Revision2A);
 
         var newUser = new User
         {
             Username = request.Username,
-            PasswordHash = passwordHash, // Сохраняем хеш
-            Role = request.Role, // Сохраняем роль как строку
+            PasswordHash = passwordHash,
+            Role = roleTypeEnum,
             FullName = request.FullName
         };
 
@@ -57,7 +65,7 @@ public class AuthService : IAuthService
     public async Task<LoginResponse> Login(LoginRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        
+
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Username == request.UserName, cancellationToken);
@@ -77,17 +85,17 @@ public class AuthService : IAuthService
 
         //Генерация и сохранение Refresh Token
         var refreshToken = GenerateRefreshToken();
-        
+
         user.RefreshToken = refreshToken;
         // Срок действия - 7 дней
-        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7); 
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
 
         // Сохранение изменений в БД
         // EF Core отслеживает user и сгенерирует UPDATE-запрос только для двух полей: RefreshToken и RefreshTokenExpiryTime
         await _context.SaveChangesAsync(cancellationToken);
-        
+
         var token = _jwtService.GenerateToken(user.UserId, user.Username, user.Role.ToString());
-        
+
         return new LoginResponse
         {
             Id = user.UserId,
@@ -95,7 +103,7 @@ public class AuthService : IAuthService
             RefreshToken = refreshToken
         };
     }
-    
+
     /// <summary>
     /// Обновляет пару токенов, используя Refresh Token.
     /// </summary>
@@ -119,7 +127,7 @@ public class AuthService : IAuthService
             // Срок действия Refresh Token истек
             throw new UnauthorizedAccessException("Срок действия Refresh Token истек. Требуется повторный вход.");
         }
-        
+
         // Генерация новой пары токенов
         var newJwtToken = _jwtService.GenerateToken(user.UserId, user.Username, user.Role.ToString());
         var newRefreshToken = GenerateRefreshToken(); // Новый Refresh Token
@@ -138,7 +146,7 @@ public class AuthService : IAuthService
             RefreshToken = newRefreshToken
         };
     }
-    
+
     private string GenerateRefreshToken()
     {
         // 💡 Используем безопасный генератор случайных чисел

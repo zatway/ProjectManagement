@@ -1,3 +1,5 @@
+using Domain.Enums;
+
 namespace Infrastructure.Services;
 
 using System.IdentityModel.Tokens.Jwt;
