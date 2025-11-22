@@ -5,6 +5,7 @@ using System.Text;
 using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
+using Infrastructure.Contexts;
 using Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);

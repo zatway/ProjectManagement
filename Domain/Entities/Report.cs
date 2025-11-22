@@ -1,3 +1,5 @@
+using Domain.Enums;
+
 namespace Domain.Entities;
 
 /// <summary>
@@ -21,29 +23,42 @@ public class Report
     public int? StageId { get; set; }
 
     /// <summary>
-    /// Тип отчета (например, "PDF_Act", "Excel_KPI").
+    /// Тип отчета
     /// </summary>
-    public string ReportType { get; set; }
+    public ReportType ReportType { get; set; }
+    
+    /// <summary>
+    /// Статус готовности отчета
+    /// </summary>
+    public ReportStatus Status { get; set; }
 
     /// <summary>
     /// Дата и время генерации отчета.
     /// </summary>
     public DateTime GeneratedAt { get; set; }
+    
+    /// <summary>
+    /// Идентификатор пользователя, сгенерировавшего отчет (Foreign Key)
+    /// </summary>
+    public int GeneratedByUserId { get; set; }
 
     /// <summary>
     /// Путь к сохраненному файлу отчета.
     /// </summary>
     public string FilePath { get; set; }
 
-    // Навигационные свойства для связи
+    /// <summary>
+    /// JSON-конфигурация, отправленная с фронтенда (например, список полей для включения).
+    /// </summary>
+    public string? ReportConfig { get; set; }
     
     /// <summary>
-    /// Проект, к которому относится отчет.
+    /// Имя файла
     /// </summary>
-    public Project Project { get; set; }
-
-    /// <summary>
-    /// Этап, к которому относится отчет.
-    /// </summary>
-    public Stage Stage { get; set; }
+    public string? TargetFileName { get; set; }
+    
+    // Навигационные свойства
+    public Project Project { get; set; } = null!;
+    public Stage? Stage { get; set; }
+    public User GeneratedBy { get; set; } = null!;
 }

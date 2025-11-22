@@ -8,11 +8,6 @@ public enum ReportType
     PdfAct,
     
     /// <summary>
-    /// PDF-отчет по шаблону ГОСТ (Протокол)
-    /// </summary>
-    PdfProtocol,
-    
-    /// <summary>
     /// Экспорт данных в Excel для KPI
     /// </summary>
     ExcelKpi

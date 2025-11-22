@@ -61,4 +61,9 @@ public class User
     /// Коллекция уведомлений, предназначенных для этого пользователя.
     /// </summary>
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+    
+    /// <summary>
+    /// Коллекция отчетов, сгенерированных этим пользователем. 💡 ДОБАВЛЕНО
+    /// </summary>
+    public ICollection<Report> Reports { get; set; } = new List<Report>();
 }

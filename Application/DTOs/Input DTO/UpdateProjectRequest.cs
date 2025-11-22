@@ -4,7 +4,6 @@ namespace Application.DTOs.Input_DTO;
 
 /// <summary>
 /// DTO для обновления проекта. Используется для входящих запросов PATCH
-/// Содержит атрибуты валидации.
 /// </summary>
 public class UpdateProjectRequest
 {
