@@ -83,11 +83,9 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Неверное имя пользователя или пароль.");
         }
 
-        //Генерация и сохранение Refresh Token
         var refreshToken = GenerateRefreshToken();
 
         user.RefreshToken = refreshToken;
-        // Срок действия - 7 дней
         user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
 
         // Сохранение изменений в БД
@@ -100,7 +98,9 @@ public class AuthService : IAuthService
         {
             Id = user.UserId,
             Token = token,
-            RefreshToken = refreshToken
+            RefreshToken = refreshToken,
+            FullName = user.FullName,
+            UserRole = user.Role.ToString()
         };
     }
 

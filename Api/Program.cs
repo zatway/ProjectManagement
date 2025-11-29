@@ -24,6 +24,18 @@ builder.Services.AddDbContext<ProjectManagementDbContext>(options =>
         b => b.MigrationsAssembly("ProjectManagement.Infrastructure"));
 });
 
+// В builder.Services (после AddDbContext, перед AddAuthentication)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowSpecificOrigins", policy =>
+    {
+        policy.WithOrigins("http://localhost:5174") // Добавьте свои
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
 // --- 2. Настройка JWT Авторизации ---
 var jwtSecretKey = builder.Configuration["Jwt:Key"] ??
                    throw new InvalidOperationException("JWT Key is not configured.");
@@ -122,8 +134,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
 // ВАЖЕН ПОРЯДОК
 app.UseRouting(); 
+
+app.UseCors("AllowSpecificOrigins");
 
 app.UseAuthentication(); 
 

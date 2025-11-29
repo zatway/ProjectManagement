@@ -3,7 +3,6 @@ using Application.DTOs.Output_DTO;
 using Application.Interfaces;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
-
 namespace Api.Controllers;
 
 public class AuthController : ControllerBase
