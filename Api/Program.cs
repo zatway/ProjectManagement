@@ -79,17 +79,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // Настройка SignalR
 builder.Services.AddSignalR();
-builder.Services.AddScoped(typeof(IHubContext<NotificationHubStub>), sp =>
-{
-    var realContext = sp.GetRequiredService<IHubContext<NotificationHub>>();
-    return (IHubContext<NotificationHubStub>)realContext;
-});
+builder.Services.AddScoped<IHubContext<NotificationHub>>(sp =>
+    sp.GetRequiredService<IHubContext<NotificationHub>>());
 
 builder.Services.AddControllers();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IProjectService, ProjectService>();
+builder.Services.AddScoped<IStageService, StagesService>();
+builder.Services.AddScoped<IUsersService, UserService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<INotificationSender, SignalRNotificationSender>();
 
@@ -136,15 +135,15 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // ВАЖЕН ПОРЯДОК
-app.UseRouting(); 
+app.UseRouting();
 
 app.UseCors("AllowSpecificOrigins");
 
-app.UseAuthentication(); 
+app.UseAuthentication();
 
-app.UseAuthorization(); 
+app.UseAuthorization();
 
-app.UseEndpoints(endpoints => 
+app.UseEndpoints(endpoints =>
 {
     endpoints.MapControllers();
 

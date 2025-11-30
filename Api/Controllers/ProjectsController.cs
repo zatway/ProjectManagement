@@ -38,7 +38,7 @@ public class ProjectsController : ControllerBase
     [HttpGet("all")]
     [ProducesResponseType(typeof(ShortProjectResponse[]), 200)]
     [ProducesResponseType(404)]
-    public async Task<IActionResult> GetAllShortProjects(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAllShortProjects(CancellationToken cancellationToken)
     {
         try
         {
