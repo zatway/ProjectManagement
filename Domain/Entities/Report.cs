@@ -45,7 +45,7 @@ public class Report
     /// <summary>
     /// Путь к сохраненному файлу отчета.
     /// </summary>
-    public string FilePath { get; set; }
+    public string? FilePath { get; set; }
 
     /// <summary>
     /// JSON-конфигурация, отправленная с фронтенда (например, список полей для включения).
