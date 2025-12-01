@@ -4,32 +4,39 @@ using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json; 
+using System.Text.Json;
 using Application.DTOs.Output_DTO.SignalR;
 using Application.Interfaces.SignalR;
 using Infrastructure.Contexts;
 using OfficeOpenXml;
-using OfficeOpenXml.Style; 
-using iText.Kernel.Pdf; 
+using OfficeOpenXml.Style;
+using iText.Kernel.Pdf;
 using iText.Layout;
-using iText.Layout.Element; 
+using iText.Layout.Element;
 using iText.Layout.Properties;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services;
 
 public class ReportService : IReportService
 {
-    private readonly ProjectManagementDbContext _context;
+    private readonly IDbContextFactory<ProjectManagementDbContext> _contextFactory; // Фабрика вместо scoped
     private readonly INotificationSender _notificationSender;
     private readonly IHostEnvironment _environment;
+    private readonly ILogger<ReportService> _logger;
     private readonly string _reportsDirectory;
 
-    public ReportService(ProjectManagementDbContext context, IHostEnvironment environment, INotificationSender notificationSender)
+    public ReportService(
+        IDbContextFactory<ProjectManagementDbContext> contextFactory,
+        IHostEnvironment environment,
+        INotificationSender notificationSender,
+        ILogger<ReportService> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _notificationSender = notificationSender;
         _environment = environment;
+        _logger = logger;
 
         _reportsDirectory = Path.Combine(_environment.ContentRootPath, "ReportsStorage");
 
@@ -47,6 +54,7 @@ public class ReportService : IReportService
         int userId,
         CancellationToken cancellationToken)
     {
+        using var context = await _contextFactory.CreateDbContextAsync(cancellationToken); // Локальный контекст
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!Enum.TryParse<ReportType>(request.ReportType, true, out var reportTypeEnum))
@@ -55,7 +63,7 @@ public class ReportService : IReportService
                 $"Тип отчета '{request.ReportType}' не является корректным значением для ReportType.");
         }
 
-        var project = await _context.Projects
+        var project = await context.Projects
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.ProjectId == request.ProjectId, cancellationToken);
 
@@ -63,7 +71,7 @@ public class ReportService : IReportService
         {
             throw new KeyNotFoundException($"Проект с ID {request.ProjectId} не найден.");
         }
-        
+
         var newReport = new Report
         {
             ProjectId = request.ProjectId,
@@ -73,13 +81,14 @@ public class ReportService : IReportService
             GeneratedAt = DateTime.UtcNow,
             GeneratedByUserId = userId,
             ReportConfig = request.ReportConfig,
-            TargetFileName = request.TargetFileName
+            TargetFileName = request.TargetFileName,
+            FilePath = null
         };
 
-        await _context.Reports.AddAsync(newReport, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.Reports.AddAsync(newReport, cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
 
-        _ = Task.Run(async () => { await GenerateAndSaveReport(newReport.ReportId); });
+        _ = Task.Run(async () => { await GenerateAndSaveReport(newReport.ReportId); }); // Без CT для background
 
         return new ReportResponse
         {
@@ -97,16 +106,26 @@ public class ReportService : IReportService
     /// </summary>
     public async Task GenerateAndSaveReport(int reportId)
     {
-        var report = await _context.Reports
+        using var context = await _contextFactory.CreateDbContextAsync(); // Новый контекст для background
+        var report = await context.Reports
             .Include(r => r.Project).ThenInclude(p => p.Stages)
             .Include(r => r.GeneratedBy)
             .FirstOrDefaultAsync(r => r.ReportId == reportId);
 
-        if (report == null) return;
+         if (report == null)
+        {
+            _logger?.LogWarning("Отчёт с ID {ReportId} не найден для генерации.", reportId);
+            return;
+        }
+
+        if (report.Status == ReportStatus.Complete || report.Status == ReportStatus.Failed)
+        {
+            _logger?.LogInformation("Отчёт {ReportId} уже обработан (статус: {Status}).", reportId, report.Status);
+            return;
+        }
 
         report.Status = ReportStatus.InProgress;
-        // Используем новый контекст для сохранения
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
 
         try
         {
@@ -125,7 +144,7 @@ public class ReportService : IReportService
                     fileExtension = "pdf";
                     break;
                 case ReportType.ExcelKpi:
-                    fileBytes = await GenerateExcelKpiAsync(report, config);
+                    fileBytes = await GenerateExcelKpiAsync(report, config, context); // Передаём context
                     fileExtension = "xlsx";
                     break;
                 default:
@@ -144,14 +163,13 @@ public class ReportService : IReportService
             }
 
             string fileName = $"{baseFileName}_{report.ReportId}.{fileExtension}";
-            
             string fullPath = Path.Combine(_reportsDirectory, fileName);
 
             await File.WriteAllBytesAsync(fullPath, fileBytes);
 
             report.FilePath = fullPath;
             report.Status = ReportStatus.Complete;
-            
+
             var newNotification = new Notification
             {
                 UserId = report.GeneratedByUserId,
@@ -159,10 +177,10 @@ public class ReportService : IReportService
                 Message = $"Отчет '{report.ReportType.ToString()}' по проекту '{report.Project.Name}' готов к скачиванию.",
                 CreatedAt = DateTime.UtcNow
             };
-            await _context.Notifications.AddAsync(newNotification);
-            await _context.SaveChangesAsync();
+            await context.Notifications.AddAsync(newNotification);
+            await context.SaveChangesAsync();
 
-            var notificationDto = new NotificationResponse 
+            var notificationDto = new NotificationResponse
             {
                 NotificationId = newNotification.NotificationId,
                 UserId = newNotification.UserId,
@@ -174,17 +192,20 @@ public class ReportService : IReportService
             };
 
             await _notificationSender.SendReportCompleteNotificationAsync(
-                newNotification.UserId, 
+                newNotification.UserId,
                 notificationDto);
+
+            _logger?.LogInformation("Отчёт {ReportId} успешно сгенерирован: {FilePath}", reportId, fullPath);
         }
         catch (Exception ex)
         {
             report.Status = ReportStatus.Failed;
             report.FilePath = null;
+            _logger?.LogError(ex, "Ошибка генерации отчёта {ReportId}: {Message}", reportId, ex.Message);
         }
         finally
         {
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
     }
 
@@ -195,7 +216,8 @@ public class ReportService : IReportService
         int projectId,
         CancellationToken cancellationToken)
     {
-        var projectExists = await _context.Projects
+        using var context = await _contextFactory.CreateDbContextAsync(cancellationToken); // Локальный для consistency
+        var projectExists = await context.Projects
             .AnyAsync(p => p.ProjectId == projectId, cancellationToken);
 
         if (!projectExists)
@@ -203,14 +225,15 @@ public class ReportService : IReportService
             throw new KeyNotFoundException($"Проект с ID {projectId} не найден.");
         }
 
-        var reports = await _context.Reports
+        var reports = await context.Reports
             .AsNoTracking()
+            .Include(r => r.Project)
             .Where(r => r.ProjectId == projectId)
-            .OrderByDescending(r => r.GeneratedAt) // Сортируем по дате генерации
+            .OrderByDescending(r => r.GeneratedAt)
             .Select(r => new ShortReportResponse
             {
                 ReportId = r.ReportId,
-                ProjectName = r.Project.Name, // Навигационное свойство доступно
+                ProjectName = r.Project.Name,
                 ReportType = r.ReportType.ToString(),
                 Status = r.Status.ToString(),
                 GeneratedAt = r.GeneratedAt,
@@ -220,7 +243,8 @@ public class ReportService : IReportService
 
         return reports;
     }
-    private byte[] GeneratePdfAct(Report report, dynamic config)
+
+ private byte[] GeneratePdfAct(Report report, dynamic config)
     {
         using var ms = new MemoryStream();
 
@@ -306,11 +330,11 @@ public class ReportService : IReportService
 
         return ms.ToArray();
     }
-
-    private async Task<byte[]> GenerateExcelKpiAsync(Report report, dynamic config)
+ 
+    private async Task<byte[]> GenerateExcelKpiAsync(Report report, dynamic config, ProjectManagementDbContext context) // Добавлен параметр context
     {
-        // Запрос данных этапов
-        var stages = await _context.Stages
+        // Запрос данных этапов с переданным context
+        var stages = await context.Stages
             .AsNoTracking()
             .Where(s => s.ProjectId == report.ProjectId)
             .OrderBy(s => s.StageId)
@@ -395,7 +419,8 @@ public class ReportService : IReportService
         int reportId,
         CancellationToken cancellationToken)
     {
-        var report = await _context.Reports
+        using var context = await _contextFactory.CreateDbContextAsync(cancellationToken); // Локальный
+        var report = await context.Reports
             .AsNoTracking()
             .Include(r => r.Project)
             .FirstOrDefaultAsync(r => r.ReportId == reportId, cancellationToken);
@@ -414,6 +439,7 @@ public class ReportService : IReportService
         // 💡 Реальное чтение файла с диска
         if (!File.Exists(report.FilePath))
         {
+            _logger?.LogWarning("Файл отчёта {ReportId} не найден: {FilePath}", reportId, report.FilePath);
             throw new KeyNotFoundException($"Файл отчета не найден по пути: {report.FilePath}");
         }
 
@@ -437,6 +463,7 @@ public class ReportService : IReportService
         // Возвращаем имя файла, которое будет отображаться у пользователя
         string fileName = Path.GetFileName(report.FilePath);
 
+        _logger?.LogInformation("Отчёт {ReportId} успешно скачан.", reportId);
         return (fileBytes, contentType, fileName);
     }
 }

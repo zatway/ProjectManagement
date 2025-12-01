@@ -10,19 +10,31 @@ using Infrastructure.Services;
 using Api.Hubs;
 using Application.Interfaces.SignalR;
 using Infrastructure.Services.SignalR;
-using Infrastructure.SignalR.Hubs;
-using Microsoft.AspNetCore.SignalR; // 💡 Добавляем пространство имен для SignalR Hub
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.AddConsole();
+
 // --- 1. Настройка Подключения к БД ---
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrEmpty(connectionString))
+{
+    throw new InvalidOperationException("Connection string 'DefaultConnection' not found in appsettings.json.");
+}
 
 builder.Services.AddDbContext<ProjectManagementDbContext>(options =>
 {
     options.UseNpgsql(connectionString,
         b => b.MigrationsAssembly("ProjectManagement.Infrastructure"));
 });
+
+builder.Services.AddDbContextFactory<ProjectManagementDbContext>(
+    options =>  // Action<DbContextOptionsBuilder>
+    {
+        options.UseNpgsql(connectionString,
+            b => b.MigrationsAssembly("ProjectManagement.Infrastructure"));
+    },
+    ServiceLifetime.Scoped);
 
 // В builder.Services (после AddDbContext, перед AddAuthentication)
 builder.Services.AddCors(options =>
@@ -39,8 +51,10 @@ builder.Services.AddCors(options =>
 // --- 2. Настройка JWT Авторизации ---
 var jwtSecretKey = builder.Configuration["Jwt:Key"] ??
                    throw new InvalidOperationException("JWT Key is not configured.");
-var issuer = builder.Configuration["Jwt:Issuer"];
-var audience = builder.Configuration["Jwt:Audience"];
+var issuer = builder.Configuration["Jwt:Issuer"] ??
+             throw new InvalidOperationException("JWT Issuer is not configured.");
+var audience = builder.Configuration["Jwt:Audience"] ??
+               throw new InvalidOperationException("JWT Audience is not configured.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -79,8 +93,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // Настройка SignalR
 builder.Services.AddSignalR();
-builder.Services.AddScoped<IHubContext<NotificationHub>>(sp =>
-    sp.GetRequiredService<IHubContext<NotificationHub>>());
 
 builder.Services.AddControllers();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -150,7 +162,6 @@ app.UseEndpoints(endpoints =>
     endpoints.MapHub<NotificationHub>("/hubs/notifications");
 });
 
-
 app.Run();
 
 async Task SeedDataAsync(IHost app)
@@ -168,7 +179,7 @@ async Task SeedDataAsync(IHost app)
             {
                 Username = "admin",
                 PasswordHash =
-                    "$2a$12$Nq5bW2V8d4Dk4vK6v8j0lO/M.yF6zS7E0yH1wP4nZqX.yH1zH0e8c",
+                    "$2a$12$Nq5bW2V8d4Dk4vK6v8j0lO/M.yF6zS7E0yH1wP4nZqX.yH1zH0e8c", // Хэш для пароля "admin123" (используйте BCrypt для реальных)
                 Role = UserRole.Administrator,
                 FullName = "Администратор системы"
             };
@@ -176,7 +187,7 @@ async Task SeedDataAsync(IHost app)
             {
                 Username = "specialist",
                 PasswordHash =
-                    "$2a$12$Nq5bW2V8d4Dk4vK6v8j0lO/M.yF6zS7E0yH1wP4nZqX.yH1zH0e8c", // Пример хэша для "password"
+                    "$2a$12$Nq5bW2V8d4Dk4vK6v8j0lO/M.yF6zS7E0yH1wP4nZqX.yH1zH0e8c", // Хэш для "password"
                 Role = UserRole.Specialist,
                 FullName = "Специалист по проектам"
             };
