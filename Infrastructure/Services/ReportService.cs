@@ -1,3 +1,4 @@
+using System.Globalization;
 using Application.DTOs.Input_DTO;
 using Application.DTOs.Output_DTO;
 using Application.Interfaces;
@@ -17,7 +18,7 @@ using iText.Layout.Properties;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Services;
+namespace Infrastructure.Services; 
 
 public class ReportService : IReportService
 {
@@ -37,6 +38,8 @@ public class ReportService : IReportService
         _notificationSender = notificationSender;
         _environment = environment;
         _logger = logger;
+        
+        ExcelPackage.License.SetNonCommercialPersonal("zatway");
 
         _reportsDirectory = Path.Combine(_environment.ContentRootPath, "ReportsStorage");
 
@@ -258,7 +261,7 @@ public class ReportService : IReportService
                 .SetTextAlignment(TextAlignment.CENTER));
             document.Add(new Paragraph($"АКТ СДАЧИ-ПРИЕМКИ РАБОТ №{report.ReportId}").SetFontSize(16).SimulateBold()
                 .SetTextAlignment(TextAlignment.CENTER).SetMarginTop(20));
-            document.Add(new Paragraph($"от {report.GeneratedAt:«dd» MMMM yyyy г.}").SetFontSize(12)
+            document.Add(new Paragraph($"от {report.GeneratedAt.ToString("dd MMMM yyyy", new CultureInfo("ru-RU"))} г.").SetFontSize(12)
                 .SetTextAlignment(TextAlignment.CENTER).SetMarginBottom(30));
 
             document.Add(new Paragraph("г. Москва").SetFontSize(12)
@@ -349,8 +352,11 @@ public class ReportService : IReportService
         headerStyle.Style.Font.Bold = true;
         headerStyle.Style.Fill.PatternType = ExcelFillStyle.Solid;
         headerStyle.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightGray);
-        headerStyle.Style.Border.BorderAround(ExcelBorderStyle.Thin);
-
+        headerStyle.Style.Border.Top.Style = ExcelBorderStyle.Thin;
+        headerStyle.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
+        headerStyle.Style.Border.Left.Style = ExcelBorderStyle.Thin;
+        headerStyle.Style.Border.Right.Style = ExcelBorderStyle.Thin;
+        
         // --- 2. ШАПКА ОТЧЕТА ---
         worksheet.Cells["A1"].Value = "Отчет по ключевым показателям проекта (KPI)";
         worksheet.Cells["A1:D1"].Merge = true;
@@ -365,7 +371,7 @@ public class ReportService : IReportService
 
         // --- 3. ТАБЛИЦА ДАННЫХ ---
         int startRow = 6;
-        int col = 1;
+          int col = 1;
 
         // Заголовки
         worksheet.Cells[startRow, col++].Value = "ID";
