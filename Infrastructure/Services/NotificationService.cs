@@ -1,5 +1,6 @@
 using Application.DTOs.Output_DTO;
 using Application.Interfaces;
+using Application.Interfaces.SignalR;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
@@ -16,10 +17,12 @@ namespace Infrastructure.Services;
 public class NotificationService : INotificationService
 {
     private readonly ProjectManagementDbContext _context;
+    private readonly INotificationSender _notificationSender;
 
-    public NotificationService(ProjectManagementDbContext context)
+    public NotificationService(ProjectManagementDbContext context, INotificationSender notificationSender)
     {
         _context = context;
+        _notificationSender = notificationSender;
     }
 
     /// <summary>
@@ -88,5 +91,44 @@ public class NotificationService : INotificationService
         
         _context.Notifications.Remove(notification);
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Создает уведомление в базе данных и отправляет его через SignalR.
+    /// </summary>
+    public async Task CreateAndSendNotificationAsync(int userId, int projectId, string message, CancellationToken cancellationToken)
+    {
+        var project = await _context.Projects
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.ProjectId == projectId, cancellationToken);
+
+        if (project == null)
+        {
+            throw new KeyNotFoundException($"Проект с ID {projectId} не найден.");
+        }
+
+        var notification = new Notification
+        {
+            UserId = userId,
+            ProjectId = projectId,
+            Message = message,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _context.Notifications.AddAsync(notification, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var notificationDto = new NotificationResponse
+        {
+            NotificationId = notification.NotificationId,
+            UserId = notification.UserId,
+            ProjectId = notification.ProjectId,
+            ProjectName = project.Name,
+            Message = notification.Message,
+            IsRead = notification.IsRead,
+            CreatedAt = notification.CreatedAt
+        };
+
+        await _notificationSender.SendNotificationAsync(notificationDto);
     }
 }

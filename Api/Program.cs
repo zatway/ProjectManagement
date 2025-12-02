@@ -72,28 +72,66 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey))
         };
 
-        // 💡 Настройка для SignalR: Извлекаем токен из Query String (обычно используется для SignalR)
+        // 💡 Настройка для SignalR: Извлекаем токен из Query String или заголовка Authorization
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
-                var accessToken = context.Request.Query["access_token"];
-
-                // Если запрос идет к Hub'у
                 var path = context.HttpContext.Request.Path;
-                if (!string.IsNullOrEmpty(accessToken) && (path.StartsWithSegments("/hubs/notifications")))
+                
+                // Если запрос идет к Hub'у
+                if (path.StartsWithSegments("/hubs/notifications"))
                 {
-                    // Токен добавляется в контекст, чтобы его мог проверить JWT Bearer
-                    context.Token = accessToken;
+                    Console.WriteLine($"[JWT Bearer] SignalR negotiation request for path: {path}");
+                    
+                    // Сначала пробуем получить токен из query string (для WebSocket)
+                    var accessToken = context.Request.Query["access_token"];
+                    Console.WriteLine($"[JWT Bearer] Token from query string: {(string.IsNullOrEmpty(accessToken) ? "NOT FOUND" : "FOUND")}");
+                    
+                    // Если токена нет в query string, пробуем получить из заголовка Authorization
+                    if (string.IsNullOrEmpty(accessToken))
+                    {
+                        var authHeader = context.Request.Headers["Authorization"].ToString();
+                        Console.WriteLine($"[JWT Bearer] Authorization header: {(string.IsNullOrEmpty(authHeader) ? "NOT FOUND" : "FOUND")}");
+                        
+                        if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                        {
+                            accessToken = authHeader.Substring("Bearer ".Length).Trim();
+                            Console.WriteLine($"[JWT Bearer] Token extracted from Authorization header");
+                        }
+                    }
+                    
+                    if (!string.IsNullOrEmpty(accessToken))
+                    {
+                        // Токен добавляется в контекст, чтобы его мог проверить JWT Bearer
+                        context.Token = accessToken;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[JWT Bearer] WARNING: No token found in query string or Authorization header!");
+                    }
                 }
 
+                return Task.CompletedTask;
+            },
+            OnAuthenticationFailed = context =>
+            {
+                Console.WriteLine($"[JWT Bearer] Authentication failed: {context.Exception?.Message}");
+                return Task.CompletedTask;
+            },
+            OnChallenge = context =>
+            {
+                Console.WriteLine($"[JWT Bearer] Challenge triggered. Error: {context.Error}, ErrorDescription: {context.ErrorDescription}");
                 return Task.CompletedTask;
             }
         };
     });
 
 // Настройка SignalR
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true; // Включаем детальные ошибки для отладки
+});
 
 builder.Services.AddControllers();
 builder.Services.AddScoped<IAuthService, AuthService>();

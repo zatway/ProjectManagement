@@ -6,8 +6,6 @@ using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
-using Application.DTOs.Output_DTO.SignalR;
-using Application.Interfaces.SignalR;
 using Infrastructure.Contexts;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
@@ -23,7 +21,7 @@ namespace Infrastructure.Services;
 public class ReportService : IReportService
 {
     private readonly IDbContextFactory<ProjectManagementDbContext> _contextFactory; // Фабрика вместо scoped
-    private readonly INotificationSender _notificationSender;
+    private readonly INotificationService _notificationService;
     private readonly IHostEnvironment _environment;
     private readonly ILogger<ReportService> _logger;
     private readonly string _reportsDirectory;
@@ -31,11 +29,11 @@ public class ReportService : IReportService
     public ReportService(
         IDbContextFactory<ProjectManagementDbContext> contextFactory,
         IHostEnvironment environment,
-        INotificationSender notificationSender,
+        INotificationService notificationService,
         ILogger<ReportService> logger)
     {
         _contextFactory = contextFactory;
-        _notificationSender = notificationSender;
+        _notificationService = notificationService;
         _environment = environment;
         _logger = logger;
         
@@ -131,28 +129,11 @@ public class ReportService : IReportService
         await context.SaveChangesAsync();
 
         // Уведомление о начале генерации
-        var inProgressNotification = new Notification
-        {
-            UserId = report.GeneratedByUserId,
-            ProjectId = report.ProjectId,
-            Message = $"Генерация отчета '{report.ReportType.ToString()}' по проекту '{report.Project.Name}' началась.",
-            CreatedAt = DateTime.UtcNow
-        };
-        await context.Notifications.AddAsync(inProgressNotification);
-        await context.SaveChangesAsync();
-
-        var inProgressNotificationDto = new NotificationResponse
-        {
-            NotificationId = inProgressNotification.NotificationId,
-            UserId = inProgressNotification.UserId,
-            ProjectId = inProgressNotification.ProjectId,
-            ProjectName = report.Project.Name,
-            Message = inProgressNotification.Message,
-            IsRead = inProgressNotification.IsRead,
-            CreatedAt = inProgressNotification.CreatedAt
-        };
-
-        await _notificationSender.SendNotificationAsync(inProgressNotificationDto);
+        await _notificationService.CreateAndSendNotificationAsync(
+            report.GeneratedByUserId,
+            report.ProjectId,
+            $"Генерация отчета '{report.ReportType.ToString()}' по проекту '{report.Project.Name}' началась.",
+            CancellationToken.None);
 
         try
         {
@@ -196,29 +177,13 @@ public class ReportService : IReportService
 
             report.FilePath = fullPath;
             report.Status = ReportStatus.Complete;
-
-            var newNotification = new Notification
-            {
-                UserId = report.GeneratedByUserId,
-                ProjectId = report.ProjectId,
-                Message = $"Отчет '{report.ReportType.ToString()}' по проекту '{report.Project.Name}' готов к скачиванию.",
-                CreatedAt = DateTime.UtcNow
-            };
-            await context.Notifications.AddAsync(newNotification);
             await context.SaveChangesAsync();
 
-            var notificationDto = new NotificationResponse
-            {
-                NotificationId = newNotification.NotificationId,
-                UserId = newNotification.UserId,
-                ProjectId = newNotification.ProjectId,
-                ProjectName = report.Project.Name,
-                Message = newNotification.Message,
-                IsRead = newNotification.IsRead,
-                CreatedAt = newNotification.CreatedAt
-            };
-
-            await _notificationSender.SendNotificationAsync(notificationDto);
+            await _notificationService.CreateAndSendNotificationAsync(
+                report.GeneratedByUserId,
+                report.ProjectId,
+                $"Отчет '{report.ReportType.ToString()}' по проекту '{report.Project.Name}' готов к скачиванию.",
+                CancellationToken.None);
 
             _logger?.LogInformation("Отчёт {ReportId} успешно сгенерирован: {FilePath}", reportId, fullPath);
         }
@@ -226,30 +191,14 @@ public class ReportService : IReportService
         {
             report.Status = ReportStatus.Failed;
             report.FilePath = null;
-
-            // Уведомление об ошибке
-            var failedNotification = new Notification
-            {
-                UserId = report.GeneratedByUserId,
-                ProjectId = report.ProjectId,
-                Message = $"Ошибка генерации отчета '{report.ReportType.ToString()}' по проекту '{report.Project.Name}'.",
-                CreatedAt = DateTime.UtcNow
-            };
-            await context.Notifications.AddAsync(failedNotification);
             await context.SaveChangesAsync();
 
-            var failedNotificationDto = new NotificationResponse
-            {
-                NotificationId = failedNotification.NotificationId,
-                UserId = failedNotification.UserId,
-                ProjectId = failedNotification.ProjectId,
-                ProjectName = report.Project.Name,
-                Message = failedNotification.Message,
-                IsRead = failedNotification.IsRead,
-                CreatedAt = failedNotification.CreatedAt
-            };
-
-            await _notificationSender.SendNotificationAsync(failedNotificationDto);
+            // Уведомление об ошибке
+            await _notificationService.CreateAndSendNotificationAsync(
+                report.GeneratedByUserId,
+                report.ProjectId,
+                $"Ошибка генерации отчета '{report.ReportType.ToString()}' по проекту '{report.Project.Name}'.",
+                CancellationToken.None);
 
             _logger?.LogError(ex, "Ошибка генерации отчёта {ReportId}: {Message}", reportId, ex.Message);
         }

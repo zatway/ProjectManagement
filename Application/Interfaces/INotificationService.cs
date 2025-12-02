@@ -18,4 +18,9 @@ public interface INotificationService
     /// Удаляет уведомление по его ID.
     /// </summary>
     Task DeleteNotificationAsync(int notificationId, int userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Создает уведомление в базе данных и отправляет его через SignalR.
+    /// </summary>
+    Task CreateAndSendNotificationAsync(int userId, int projectId, string message, CancellationToken cancellationToken);
 }

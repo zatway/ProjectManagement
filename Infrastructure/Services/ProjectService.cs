@@ -1,8 +1,6 @@
 using Application.DTOs.Input_DTO;
 using Application.DTOs.Output_DTO;
 using Application.Interfaces;
-using Application.Interfaces.SignalR;
-using Application.DTOs.Output_DTO.SignalR;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Contexts;
@@ -16,12 +14,12 @@ namespace Infrastructure.Services;
 public class ProjectService : IProjectService
 {
     private readonly ProjectManagementDbContext _context;
-    private readonly INotificationSender _notificationSender;
+    private readonly INotificationService _notificationService;
 
-    public ProjectService(ProjectManagementDbContext context, INotificationSender notificationSender)
+    public ProjectService(ProjectManagementDbContext context, INotificationService notificationService)
     {
         _context = context;
-        _notificationSender = notificationSender;
+        _notificationService = notificationService;
     }
 
     public async Task<ProjectResponse> GetProjectByIdAsync(int projectId, CancellationToken cancellationToken)
@@ -122,28 +120,11 @@ public class ProjectService : IProjectService
         // Уведомление при смене статуса
         if (request.Status is not null && oldStatus != project.Status)
         {
-            var notification = new Notification
-            {
-                UserId = project.CreatedByUserId,
-                ProjectId = project.ProjectId,
-                Message = $"Статус проекта '{project.Name}' изменен с '{oldStatus}' на '{project.Status}'.",
-                CreatedAt = DateTime.UtcNow
-            };
-            await _context.Notifications.AddAsync(notification);
-            await _context.SaveChangesAsync(cancellationToken);
-
-            var notificationDto = new NotificationResponse
-            {
-                NotificationId = notification.NotificationId,
-                UserId = notification.UserId,
-                ProjectId = notification.ProjectId,
-                ProjectName = project.Name,
-                Message = notification.Message,
-                IsRead = notification.IsRead,
-                CreatedAt = notification.CreatedAt
-            };
-
-            await _notificationSender.SendNotificationAsync(notificationDto);
+            await _notificationService.CreateAndSendNotificationAsync(
+                project.CreatedByUserId,
+                project.ProjectId,
+                $"Статус проекта '{project.Name}' изменен с '{oldStatus}' на '{project.Status}'.",
+                cancellationToken);
         }
     }
 
