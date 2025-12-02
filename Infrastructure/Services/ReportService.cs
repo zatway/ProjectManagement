@@ -130,6 +130,30 @@ public class ReportService : IReportService
         report.Status = ReportStatus.InProgress;
         await context.SaveChangesAsync();
 
+        // Уведомление о начале генерации
+        var inProgressNotification = new Notification
+        {
+            UserId = report.GeneratedByUserId,
+            ProjectId = report.ProjectId,
+            Message = $"Генерация отчета '{report.ReportType.ToString()}' по проекту '{report.Project.Name}' началась.",
+            CreatedAt = DateTime.UtcNow
+        };
+        await context.Notifications.AddAsync(inProgressNotification);
+        await context.SaveChangesAsync();
+
+        var inProgressNotificationDto = new NotificationResponse
+        {
+            NotificationId = inProgressNotification.NotificationId,
+            UserId = inProgressNotification.UserId,
+            ProjectId = inProgressNotification.ProjectId,
+            ProjectName = report.Project.Name,
+            Message = inProgressNotification.Message,
+            IsRead = inProgressNotification.IsRead,
+            CreatedAt = inProgressNotification.CreatedAt
+        };
+
+        await _notificationSender.SendNotificationAsync(inProgressNotificationDto);
+
         try
         {
             string fileExtension;
@@ -194,9 +218,7 @@ public class ReportService : IReportService
                 CreatedAt = newNotification.CreatedAt
             };
 
-            await _notificationSender.SendReportCompleteNotificationAsync(
-                newNotification.UserId,
-                notificationDto);
+            await _notificationSender.SendNotificationAsync(notificationDto);
 
             _logger?.LogInformation("Отчёт {ReportId} успешно сгенерирован: {FilePath}", reportId, fullPath);
         }
@@ -204,6 +226,31 @@ public class ReportService : IReportService
         {
             report.Status = ReportStatus.Failed;
             report.FilePath = null;
+
+            // Уведомление об ошибке
+            var failedNotification = new Notification
+            {
+                UserId = report.GeneratedByUserId,
+                ProjectId = report.ProjectId,
+                Message = $"Ошибка генерации отчета '{report.ReportType.ToString()}' по проекту '{report.Project.Name}'.",
+                CreatedAt = DateTime.UtcNow
+            };
+            await context.Notifications.AddAsync(failedNotification);
+            await context.SaveChangesAsync();
+
+            var failedNotificationDto = new NotificationResponse
+            {
+                NotificationId = failedNotification.NotificationId,
+                UserId = failedNotification.UserId,
+                ProjectId = failedNotification.ProjectId,
+                ProjectName = report.Project.Name,
+                Message = failedNotification.Message,
+                IsRead = failedNotification.IsRead,
+                CreatedAt = failedNotification.CreatedAt
+            };
+
+            await _notificationSender.SendNotificationAsync(failedNotificationDto);
+
             _logger?.LogError(ex, "Ошибка генерации отчёта {ReportId}: {Message}", reportId, ex.Message);
         }
         finally

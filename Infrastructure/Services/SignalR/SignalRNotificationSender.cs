@@ -1,9 +1,8 @@
 using Application.DTOs.Output_DTO;
-using Application.Interfaces;
-using Microsoft.AspNetCore.SignalR;
 using Application.DTOs.Output_DTO.SignalR;
 using Application.Interfaces.SignalR;
 using Infrastructure.SignalR.Hubs;
+using Microsoft.AspNetCore.SignalR;
 
 namespace Infrastructure.Services.SignalR;
 
@@ -15,28 +14,11 @@ public class SignalRNotificationSender : INotificationSender
     {
         _hubContext = hubContext;
     }
-    
-    public async Task SendReportCompleteNotificationAsync(int userId, NotificationResponse notification)
-    {
-        // Клиентский метод: "ReportCompleted"
-        await _hubContext.Clients
-            .Group(userId.ToString())
-            .SendAsync("ReportCompleted", notification);
-    }
 
-    public async Task SendNewSystemNotificationAsync(int userId, NotificationResponse notification)
+    public async Task SendNotificationAsync(NotificationResponse notification)
     {
-        // Клиентский метод: "NewSystemNotification"
         await _hubContext.Clients
-            .Group(userId.ToString())
-            .SendAsync("NewSystemNotification", notification);
-    }
-
-    public async Task SendStageStatusUpdateAsync(int userId, NotificationResponse notification)
-    {
-        // Клиентский метод: "StageStatusUpdated"
-        await _hubContext.Clients
-            .Group(userId.ToString())
-            .SendAsync("StageStatusUpdated", notification);
+            .All
+            .SendAsync("ReceiveNotification", notification);
     }
 }

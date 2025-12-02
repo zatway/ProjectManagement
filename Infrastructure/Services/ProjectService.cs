@@ -1,6 +1,8 @@
 using Application.DTOs.Input_DTO;
 using Application.DTOs.Output_DTO;
 using Application.Interfaces;
+using Application.Interfaces.SignalR;
+using Application.DTOs.Output_DTO.SignalR;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Contexts;
@@ -14,10 +16,12 @@ namespace Infrastructure.Services;
 public class ProjectService : IProjectService
 {
     private readonly ProjectManagementDbContext _context;
+    private readonly INotificationSender _notificationSender;
 
-    public ProjectService(ProjectManagementDbContext context)
+    public ProjectService(ProjectManagementDbContext context, INotificationSender notificationSender)
     {
         _context = context;
+        _notificationSender = notificationSender;
     }
 
     public async Task<ProjectResponse> GetProjectByIdAsync(int projectId, CancellationToken cancellationToken)
@@ -51,12 +55,16 @@ public class ProjectService : IProjectService
         cancellationToken.ThrowIfCancellationRequested();
 
         var project = await _context.Projects
+            .Include(p => p.CreatedBy)
             .FirstOrDefaultAsync(p => p.ProjectId == projectId, cancellationToken);
 
         if (project == null)
         {
             throw new KeyNotFoundException($"Проект с ID {projectId} не найден.");
         }
+
+        var oldStatus = project.Status;
+        var oldName = project.Name;
 
         if (request.Status is not null)
         {
@@ -110,6 +118,33 @@ public class ProjectService : IProjectService
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Уведомление при смене статуса
+        if (request.Status is not null && oldStatus != project.Status)
+        {
+            var notification = new Notification
+            {
+                UserId = project.CreatedByUserId,
+                ProjectId = project.ProjectId,
+                Message = $"Статус проекта '{project.Name}' изменен с '{oldStatus}' на '{project.Status}'.",
+                CreatedAt = DateTime.UtcNow
+            };
+            await _context.Notifications.AddAsync(notification);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            var notificationDto = new NotificationResponse
+            {
+                NotificationId = notification.NotificationId,
+                UserId = notification.UserId,
+                ProjectId = notification.ProjectId,
+                ProjectName = project.Name,
+                Message = notification.Message,
+                IsRead = notification.IsRead,
+                CreatedAt = notification.CreatedAt
+            };
+
+            await _notificationSender.SendNotificationAsync(notificationDto);
+        }
     }
 
     public async Task<int> CreateProjectAsync(CreateProjectRequest request, int createdByUserId,

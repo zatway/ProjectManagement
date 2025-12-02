@@ -1,6 +1,8 @@
 using Application.DTOs.Input_DTO;
 using Application.DTOs.Output_DTO;
 using Application.Interfaces;
+using Application.Interfaces.SignalR;
+using Application.DTOs.Output_DTO.SignalR;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Contexts;
@@ -11,10 +13,12 @@ namespace Infrastructure.Services;
 public class StagesService : IStageService
 {
     private readonly ProjectManagementDbContext _context;
+    private readonly INotificationSender _notificationSender;
 
-    public StagesService(ProjectManagementDbContext context)
+    public StagesService(ProjectManagementDbContext context, INotificationSender notificationSender)
     {
         _context = context;
+        _notificationSender = notificationSender;
     }
 
     public async Task<int> CreateStageAsync(CreateStageRequest request, int projectId,
@@ -111,6 +115,8 @@ public class StagesService : IStageService
 
         var stage = await _context.Stages
             .AsNoTracking()
+            .Include(s => s.Project)
+            .Include(s => s.Specialist)
             .Where(s => s.StageId == stageId)
             .Select(s => new StageResponse
             {
@@ -138,6 +144,8 @@ public class StagesService : IStageService
     {
         // Поиск сущности для обновления
         var stage = await _context.Stages
+            .Include(s => s.Project)
+            .Include(s => s.Specialist)
             .FirstOrDefaultAsync(s => s.StageId == stageId, cancellationToken);
 
         if (stage == null)
@@ -146,6 +154,9 @@ public class StagesService : IStageService
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        var oldStatus = stage.Status;
+        var oldProgress = stage.ProgressPercent;
 
         if (request.ProgressPercent.HasValue)
         {
@@ -205,6 +216,59 @@ public class StagesService : IStageService
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Уведомление при смене статуса или прогресса (для специалиста)
+        var notifyUserId = stage.SpecialistUserId;
+        if (request.Status is not null && oldStatus != stage.Status)
+        {
+            var notification = new Notification
+            {
+                UserId = notifyUserId,
+                ProjectId = stage.ProjectId,
+                Message = $"Статус этапа '{stage.Name}' в проекте '{stage.Project.Name}' изменен с '{oldStatus}' на '{stage.Status}'.",
+                CreatedAt = DateTime.UtcNow
+            };
+            await _context.Notifications.AddAsync(notification);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            var notificationDto = new NotificationResponse
+            {
+                NotificationId = notification.NotificationId,
+                UserId = notification.UserId,
+                ProjectId = notification.ProjectId,
+                ProjectName = stage.Project.Name,
+                Message = notification.Message,
+                IsRead = notification.IsRead,
+                CreatedAt = notification.CreatedAt
+            };
+
+            await _notificationSender.SendNotificationAsync(notificationDto);
+        }
+        else if (request.ProgressPercent.HasValue && oldProgress != stage.ProgressPercent)
+        {
+            var notification = new Notification
+            {
+                UserId = notifyUserId,
+                ProjectId = stage.ProjectId,
+                Message = $"Прогресс этапа '{stage.Name}' в проекте '{stage.Project.Name}' обновлен до {stage.ProgressPercent}%.",
+                CreatedAt = DateTime.UtcNow
+            };
+            await _context.Notifications.AddAsync(notification);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            var notificationDto = new NotificationResponse
+            {
+                NotificationId = notification.NotificationId,
+                UserId = notification.UserId,
+                ProjectId = notification.ProjectId,
+                ProjectName = stage.Project.Name,
+                Message = notification.Message,
+                IsRead = notification.IsRead,
+                CreatedAt = notification.CreatedAt
+            };
+
+            await _notificationSender.SendNotificationAsync(notificationDto);
+        }
     }
 
     public async Task DeleteProjectAsync(int stageId, CancellationToken cancellationToken)
