@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq;
 using Application.DTOs.Input_DTO;
 using Application.DTOs.Output_DTO;
 using Application.Interfaces;
@@ -19,7 +20,17 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Infrastructure.Services; 
+namespace Infrastructure.Services;
+
+/// <summary>
+/// Конфигурация для генерации отчета.
+/// </summary>
+internal class ReportConfig
+{
+    public bool IncludeProgress { get; set; } = true;
+    public bool IncludeDeadline { get; set; } = true;
+    public List<int>? StageIds { get; set; }
+}
 
 public class ReportService : IReportService
 {
@@ -79,6 +90,46 @@ public class ReportService : IReportService
             throw new KeyNotFoundException($"Проект с ID {request.ProjectId} не найден.");
         }
 
+        var stageIdsToInclude = new List<int>();
+        if (request.StageIds != null && request.StageIds.Any())
+        {
+            stageIdsToInclude = request.StageIds;
+        }
+        else if (request.StageId.HasValue)
+        {
+            stageIdsToInclude.Add(request.StageId.Value);
+        }
+
+        // Объединяем StageIds с существующей конфигурацией
+        var reportConfigDict = new Dictionary<string, object>();
+        if (!string.IsNullOrWhiteSpace(request.ReportConfig))
+        {
+            try
+            {
+                var existingConfig = JsonSerializer.Deserialize<Dictionary<string, object>>(request.ReportConfig);
+                if (existingConfig != null)
+                {
+                    foreach (var kvp in existingConfig)
+                    {
+                        reportConfigDict[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        // Добавляем StageIds в конфигурацию
+        if (stageIdsToInclude.Any())
+        {
+            reportConfigDict["StageIds"] = stageIdsToInclude;
+        }
+
+        var finalReportConfig = reportConfigDict.Any() 
+            ? JsonSerializer.Serialize(reportConfigDict) 
+            : request.ReportConfig;
+
         var newReport = new Report
         {
             ProjectId = request.ProjectId,
@@ -87,7 +138,7 @@ public class ReportService : IReportService
             Status = ReportStatus.Pending,
             GeneratedAt = DateTime.UtcNow,
             GeneratedByUserId = userId,
-            ReportConfig = request.ReportConfig,
+            ReportConfig = finalReportConfig,
             TargetFileName = request.TargetFileName,
             FilePath = null
         };
@@ -171,19 +222,45 @@ public class ReportService : IReportService
             string fileExtension;
             byte[] fileBytes;
 
-            var config = report.ReportConfig is null
-                ? new { IncludeProgress = true, IncludeDeadline = true }
-                : JsonSerializer.Deserialize<dynamic>(report.ReportConfig) ??
-                  new { IncludeProgress = true, IncludeDeadline = true };
+            ReportConfig config;
+            if (report.ReportConfig is null)
+            {
+                config = new ReportConfig();
+            }
+            else
+            {
+                try
+                {
+                    var configDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(report.ReportConfig);
+                    config = new ReportConfig
+                    {
+                        IncludeProgress = configDict?.ContainsKey("IncludeProgress") == true && 
+                            configDict["IncludeProgress"].ValueKind == JsonValueKind.True,
+                        IncludeDeadline = configDict?.ContainsKey("IncludeDeadline") == true && 
+                            configDict["IncludeDeadline"].ValueKind == JsonValueKind.True,
+                        StageIds = configDict?.ContainsKey("StageIds") == true
+                            ? JsonSerializer.Deserialize<List<int>>(configDict["StageIds"].GetRawText())
+                            : null
+                    };
+                }
+                catch
+                {
+                    config = new ReportConfig();
+                }
+            }
 
             switch (report.ReportType)
             {
                 case ReportType.PdfAct:
+                    _logger.LogDebug("Начало генерации PDF отчета {ReportId}", reportId);
                     fileBytes = GeneratePdfAct(report, config);
+                    _logger.LogDebug("PDF отчет {ReportId} успешно сгенерирован, размер: {Size} байт", reportId, fileBytes.Length);
                     fileExtension = "pdf";
                     break;
                 case ReportType.ExcelKpi:
+                    _logger.LogDebug("Начало генерации Excel отчета {ReportId}", reportId);
                     fileBytes = await GenerateExcelKpiAsync(report, config, context);
+                    _logger.LogDebug("Excel отчет {ReportId} успешно сгенерирован, размер: {Size} байт", reportId, fileBytes.Length);
                     fileExtension = "xlsx";
                     break;
                 default:
@@ -255,7 +332,12 @@ public class ReportService : IReportService
                 _logger.LogError(notifyEx, "Не удалось отправить уведомление об ошибке генерации отчета {ReportId}", reportId);
             }
 
-            _logger.LogError(ex, "Ошибка генерации отчёта {ReportId}: {Message}", reportId, ex.Message);
+            _logger.LogError(ex, 
+                "Ошибка генерации отчёта {ReportId}: {Message}. Тип отчета: {ReportType}. StackTrace: {StackTrace}", 
+                reportId, 
+                ex.Message, 
+                report.ReportType,
+                ex.StackTrace);
         }
         finally
         {
@@ -301,8 +383,18 @@ public class ReportService : IReportService
     /// <summary>
     /// Генерирует PDF-документ акта сдачи-приемки работ.
     /// </summary>
-    private byte[] GeneratePdfAct(Report report, dynamic config)
+    private byte[] GeneratePdfAct(Report report, ReportConfig config)
     {
+        if (report.GeneratedBy == null)
+        {
+            throw new InvalidOperationException($"Не удалось загрузить данные пользователя для отчета {report.ReportId}");
+        }
+
+        if (report.Project == null)
+        {
+            throw new InvalidOperationException($"Не удалось загрузить данные проекта для отчета {report.ReportId}");
+        }
+
         using var ms = new MemoryStream();
 
         using (var writer = new PdfWriter(ms))
@@ -381,10 +473,25 @@ public class ReportService : IReportService
             table.AddHeaderCell(new Cell().Add(new Paragraph("Статус").SetFont(boldFont)).AddStyle(headerCellStyle));
             table.AddHeaderCell(new Cell().Add(new Paragraph("Срок сдачи").SetFont(boldFont)).AddStyle(headerCellStyle));
 
-            // Данные этапов
-            var stages = report.Project.Stages.OrderBy(s => s.StageId).ToList();
+            // Данные этапов с фильтрацией по StageIds
+            var stages = report.Project.Stages?.AsEnumerable() ?? Enumerable.Empty<Stage>();
+            
+            if (config.StageIds != null && config.StageIds.Any())
+            {
+                stages = stages.Where(s => config.StageIds.Contains(s.StageId));
+            }
+            
+            var stagesList = stages.OrderBy(s => s.StageId).ToList();
+            
+            if (!stagesList.Any())
+            {
+                _logger.LogWarning("Не найдено этапов для включения в PDF отчет {ReportId}. StageIds: {StageIds}", 
+                    report.ReportId, 
+                    config.StageIds != null ? string.Join(", ", config.StageIds) : "не указаны");
+            }
+            
             int i = 1;
-            foreach (var stage in stages)
+            foreach (var stage in stagesList)
             {
                 var cellStyle = new Style()
                     .SetFont(regularFont)
@@ -456,15 +563,47 @@ public class ReportService : IReportService
         return ms.ToArray();
     }
  
-    private async Task<byte[]> GenerateExcelKpiAsync(Report report, dynamic config, ProjectManagementDbContext context) // Добавлен параметр context
+    /// <summary>
+    /// Генерирует Excel-файл с отчетом по ключевым показателям проекта.
+    /// </summary>
+    private async Task<byte[]> GenerateExcelKpiAsync(Report report, ReportConfig config, ProjectManagementDbContext context)
     {
-        var stages = await context.Stages
+        if (report.Project == null)
+        {
+            throw new InvalidOperationException($"Не удалось загрузить данные проекта для отчета {report.ReportId}");
+        }
+
+        _logger.LogDebug("Начало генерации Excel отчета {ReportId}. ProjectId: {ProjectId}, StageIds: {StageIds}", 
+            report.ReportId, 
+            report.ProjectId,
+            config.StageIds != null ? string.Join(", ", config.StageIds) : "не указаны");
+
+        var stagesQuery = context.Stages
             .AsNoTracking()
-            .Where(s => s.ProjectId == report.ProjectId)
+            .Where(s => s.ProjectId == report.ProjectId);
+
+        // Фильтрация по StageIds, если указаны
+        if (config.StageIds != null && config.StageIds.Any())
+        {
+            _logger.LogDebug("Применяется фильтрация по StageIds: {StageIds}", string.Join(", ", config.StageIds));
+            stagesQuery = stagesQuery.Where(s => config.StageIds.Contains(s.StageId));
+        }
+
+        var stages = await stagesQuery
             .OrderBy(s => s.StageId)
             .Select(s => new { s.StageId, s.Name, s.ProgressPercent, s.Deadline, s.Status })
             .ToListAsync();
 
+        _logger.LogDebug("Найдено этапов для Excel отчета {ReportId}: {Count}", report.ReportId, stages.Count);
+
+        if (!stages.Any())
+        {
+            _logger.LogWarning("Не найдено этапов для включения в Excel отчет {ReportId}. StageIds: {StageIds}", 
+                report.ReportId, 
+                config.StageIds != null ? string.Join(", ", config.StageIds) : "не указаны");
+        }
+
+        _logger.LogDebug("Создание Excel пакета для отчета {ReportId}", report.ReportId);
         using var package = new ExcelPackage();
         var worksheet = package.Workbook.Worksheets.Add("KPI Summary");
 
@@ -524,14 +663,14 @@ public class ReportService : IReportService
 
             if (config.IncludeProgress)
             {
-                worksheet.Cells[row, col].Value = stage.ProgressPercent;
-                worksheet.Cells[row, col++].Style.Numberformat.Format = "0%"; // Форматирование
+                worksheet.Cells[row, col].Value = stage.ProgressPercent / 100.0;
+                worksheet.Cells[row, col++].Style.Numberformat.Format = "0.00%";
             }
 
             if (config.IncludeDeadline)
             {
                 worksheet.Cells[row, col].Value = stage.Deadline;
-                worksheet.Cells[row, col++].Style.Numberformat.Format = "yyyy-mm-dd"; // Форматирование даты
+                worksheet.Cells[row, col++].Style.Numberformat.Format = "dd.mm.yyyy";
             }
 
             row++;
@@ -539,7 +678,11 @@ public class ReportService : IReportService
 
         worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
 
-        return package.GetAsByteArray();
+        _logger.LogDebug("Excel пакет для отчета {ReportId} подготовлен, получение байтов", report.ReportId);
+        var result = package.GetAsByteArray();
+        _logger.LogDebug("Excel отчет {ReportId} успешно сгенерирован, размер: {Size} байт", report.ReportId, result.Length);
+        
+        return result;
     }
 
     /// <summary>
