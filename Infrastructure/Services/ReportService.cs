@@ -13,15 +13,19 @@ using iText.Kernel.Pdf;
 using iText.Layout;
 using iText.Layout.Element;
 using iText.Layout.Properties;
+using iText.Kernel.Font;
+using iText.IO.Font.Constants;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.Services; 
 
 public class ReportService : IReportService
 {
-    private readonly IDbContextFactory<ProjectManagementDbContext> _contextFactory; // Фабрика вместо scoped
+    private readonly IDbContextFactory<ProjectManagementDbContext> _contextFactory;
     private readonly INotificationService _notificationService;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IHostEnvironment _environment;
     private readonly ILogger<ReportService> _logger;
     private readonly string _reportsDirectory;
@@ -30,10 +34,12 @@ public class ReportService : IReportService
         IDbContextFactory<ProjectManagementDbContext> contextFactory,
         IHostEnvironment environment,
         INotificationService notificationService,
+        IServiceScopeFactory serviceScopeFactory,
         ILogger<ReportService> logger)
     {
         _contextFactory = contextFactory;
         _notificationService = notificationService;
+        _serviceScopeFactory = serviceScopeFactory;
         _environment = environment;
         _logger = logger;
         
@@ -55,7 +61,7 @@ public class ReportService : IReportService
         int userId,
         CancellationToken cancellationToken)
     {
-        using var context = await _contextFactory.CreateDbContextAsync(cancellationToken); // Локальный контекст
+        using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!Enum.TryParse<ReportType>(request.ReportType, true, out var reportTypeEnum))
@@ -89,7 +95,20 @@ public class ReportService : IReportService
         await context.Reports.AddAsync(newReport, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
 
-        _ = Task.Run(async () => { await GenerateAndSaveReport(newReport.ReportId); }); // Без CT для background
+        try
+        {
+            await _notificationService.CreateAndSendNotificationAsync(
+                userId,
+                request.ProjectId,
+                $"Создан отчет '{reportTypeEnum}' по проекту '{project.Name}'. Генерация началась.",
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Не удалось отправить уведомление о создании отчета {ReportId}", newReport.ReportId);
+        }
+
+        _ = Task.Run(async () => { await GenerateAndSaveReport(newReport.ReportId, _serviceScopeFactory); });
 
         return new ReportResponse
         {
@@ -105,9 +124,9 @@ public class ReportService : IReportService
     /// <summary>
     /// Внутренний метод: выполняет генерацию и сохранение файла.
     /// </summary>
-    public async Task GenerateAndSaveReport(int reportId)
+    public async Task GenerateAndSaveReport(int reportId, IServiceScopeFactory serviceScopeFactory)
     {
-        using var context = await _contextFactory.CreateDbContextAsync(); // Новый контекст для background
+        using var context = await _contextFactory.CreateDbContextAsync();
         var report = await context.Reports
             .Include(r => r.Project).ThenInclude(p => p.Stages)
             .Include(r => r.GeneratedBy)
@@ -129,11 +148,23 @@ public class ReportService : IReportService
         await context.SaveChangesAsync();
 
         // Уведомление о начале генерации
-        await _notificationService.CreateAndSendNotificationAsync(
-            report.GeneratedByUserId,
-            report.ProjectId,
-            $"Генерация отчета '{report.ReportType.ToString()}' по проекту '{report.Project.Name}' началась.",
-            CancellationToken.None);
+        try
+        {
+            using var scope = serviceScopeFactory.CreateScope();
+            var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            
+            await notificationService.CreateAndSendNotificationAsync(
+                report.GeneratedByUserId,
+                report.ProjectId,
+                $"Генерация отчета '{report.ReportType}' по проекту '{report.Project.Name}' началась.",
+                CancellationToken.None);
+            
+            _logger.LogInformation("Уведомление о начале генерации отчета {ReportId} отправлено", reportId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Не удалось отправить уведомление о начале генерации отчета {ReportId}", reportId);
+        }
 
         try
         {
@@ -152,7 +183,7 @@ public class ReportService : IReportService
                     fileExtension = "pdf";
                     break;
                 case ReportType.ExcelKpi:
-                    fileBytes = await GenerateExcelKpiAsync(report, config, context); // Передаём context
+                    fileBytes = await GenerateExcelKpiAsync(report, config, context);
                     fileExtension = "xlsx";
                     break;
                 default:
@@ -179,13 +210,25 @@ public class ReportService : IReportService
             report.Status = ReportStatus.Complete;
             await context.SaveChangesAsync();
 
-            await _notificationService.CreateAndSendNotificationAsync(
-                report.GeneratedByUserId,
-                report.ProjectId,
-                $"Отчет '{report.ReportType.ToString()}' по проекту '{report.Project.Name}' готов к скачиванию.",
-                CancellationToken.None);
+            try
+            {
+                using var scope = serviceScopeFactory.CreateScope();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                
+                await notificationService.CreateAndSendNotificationAsync(
+                    report.GeneratedByUserId,
+                    report.ProjectId,
+                    $"Отчет '{report.ReportType}' по проекту '{report.Project.Name}' готов к скачиванию.",
+                    CancellationToken.None);
+                
+                _logger.LogInformation("Уведомление о готовности отчета {ReportId} отправлено", reportId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Не удалось отправить уведомление о готовности отчета {ReportId}", reportId);
+            }
 
-            _logger?.LogInformation("Отчёт {ReportId} успешно сгенерирован: {FilePath}", reportId, fullPath);
+            _logger.LogInformation("Отчёт {ReportId} успешно сгенерирован: {FilePath}", reportId, fullPath);
         }
         catch (Exception ex)
         {
@@ -194,13 +237,25 @@ public class ReportService : IReportService
             await context.SaveChangesAsync();
 
             // Уведомление об ошибке
-            await _notificationService.CreateAndSendNotificationAsync(
-                report.GeneratedByUserId,
-                report.ProjectId,
-                $"Ошибка генерации отчета '{report.ReportType.ToString()}' по проекту '{report.Project.Name}'.",
-                CancellationToken.None);
+            try
+            {
+                using var scope = serviceScopeFactory.CreateScope();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                
+                await notificationService.CreateAndSendNotificationAsync(
+                    report.GeneratedByUserId,
+                    report.ProjectId,
+                    $"Ошибка генерации отчета '{report.ReportType}' по проекту '{report.Project.Name}': {ex.Message}",
+                    CancellationToken.None);
+                
+                _logger.LogInformation("Уведомление об ошибке генерации отчета {ReportId} отправлено", reportId);
+            }
+            catch (Exception notifyEx)
+            {
+                _logger.LogError(notifyEx, "Не удалось отправить уведомление об ошибке генерации отчета {ReportId}", reportId);
+            }
 
-            _logger?.LogError(ex, "Ошибка генерации отчёта {ReportId}: {Message}", reportId, ex.Message);
+            _logger.LogError(ex, "Ошибка генерации отчёта {ReportId}: {Message}", reportId, ex.Message);
         }
         finally
         {
@@ -215,7 +270,7 @@ public class ReportService : IReportService
         int projectId,
         CancellationToken cancellationToken)
     {
-        using var context = await _contextFactory.CreateDbContextAsync(cancellationToken); // Локальный для consistency
+        using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var projectExists = await context.Projects
             .AnyAsync(p => p.ProjectId == projectId, cancellationToken);
 
@@ -243,7 +298,10 @@ public class ReportService : IReportService
         return reports;
     }
 
- private byte[] GeneratePdfAct(Report report, dynamic config)
+    /// <summary>
+    /// Генерирует PDF-документ акта сдачи-приемки работ.
+    /// </summary>
+    private byte[] GeneratePdfAct(Report report, dynamic config)
     {
         using var ms = new MemoryStream();
 
@@ -253,54 +311,102 @@ public class ReportService : IReportService
             using var pdf = new PdfDocument(writer);
             using var document = new Document(pdf);
 
-            document.Add(new Paragraph("_________________________________").SetFontSize(10)
-                .SetTextAlignment(TextAlignment.CENTER));
-            document.Add(new Paragraph($"АКТ СДАЧИ-ПРИЕМКИ РАБОТ №{report.ReportId}").SetFontSize(16).SimulateBold()
-                .SetTextAlignment(TextAlignment.CENTER).SetMarginTop(20));
-            document.Add(new Paragraph($"от {report.GeneratedAt.ToString("dd MMMM yyyy", new CultureInfo("ru-RU"))} г.").SetFontSize(12)
-                .SetTextAlignment(TextAlignment.CENTER).SetMarginBottom(30));
+            // Настройка шрифтов
+            var boldFont = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD);
+            var regularFont = PdfFontFactory.CreateFont(StandardFonts.HELVETICA);
 
-            document.Add(new Paragraph("г. Москва").SetFontSize(12)
-                .SetTextAlignment(TextAlignment.RIGHT).SetMarginBottom(10));
+            // Заголовок документа
+            document.Add(new Paragraph("АКТ СДАЧИ-ПРИЕМКИ РАБОТ")
+                .SetFont(boldFont)
+                .SetFontSize(18)
+                .SetTextAlignment(TextAlignment.CENTER)
+                .SetMarginTop(20)
+                .SetMarginBottom(5));
+            
+            document.Add(new Paragraph($"№ {report.ReportId}")
+                .SetFont(boldFont)
+                .SetFontSize(14)
+                .SetTextAlignment(TextAlignment.CENTER)
+                .SetMarginBottom(5));
+            
+            document.Add(new Paragraph($"от {report.GeneratedAt.ToString("dd MMMM yyyy", new CultureInfo("ru-RU"))} г.")
+                .SetFont(regularFont)
+                .SetFontSize(12)
+                .SetTextAlignment(TextAlignment.CENTER)
+                .SetMarginBottom(30));
 
-            document.Add(new Paragraph($"\t— Исполнитель: **{report.GeneratedBy.FullName}**")
-                .SetFontSize(12).SetMarginLeft(30).SetMarginBottom(20));
+            // Город
+            document.Add(new Paragraph("г. Москва")
+                .SetFont(regularFont)
+                .SetFontSize(12)
+                .SetTextAlignment(TextAlignment.RIGHT)
+                .SetMarginBottom(20));
 
-            document.Add(new Paragraph($"составили настоящий Акт о том, что Исполнитель выполнил работы по проекту:")
-                .SetFontSize(12).SetFirstLineIndent(30));
+            // Исполнитель
+            document.Add(new Paragraph($"Исполнитель: {report.GeneratedBy.FullName}")
+                .SetFont(regularFont)
+                .SetFontSize(12)
+                .SetMarginLeft(30)
+                .SetMarginBottom(15));
 
-            document.Add(new Paragraph($"«**{report.Project.Name}**»").SetFontSize(14).SimulateBold()
-                .SetTextAlignment(TextAlignment.CENTER).SetMarginTop(10).SetMarginBottom(20));
+            // Преамбула
+            document.Add(new Paragraph("составили настоящий Акт о том, что Исполнитель выполнил работы по проекту:")
+                .SetFont(regularFont)
+                .SetFontSize(12)
+                .SetFirstLineIndent(30)
+                .SetMarginBottom(10));
 
-            var table = new iText.Layout.Element.Table(UnitValue.CreatePercentArray(new float[] { 5, 55, 20, 20 }))
-                .UseAllAvailableWidth().SetMarginBottom(20);
+            // Название проекта
+            document.Add(new Paragraph($"«{report.Project.Name}»")
+                .SetFont(boldFont)
+                .SetFontSize(14)
+                .SetTextAlignment(TextAlignment.CENTER)
+                .SetMarginTop(10)
+                .SetMarginBottom(25));
 
-            table.AddHeaderCell(new Cell().Add(new Paragraph("№").SimulateBold())
-                .SetTextAlignment(TextAlignment.CENTER));
-            table.AddHeaderCell(new Cell().Add(new Paragraph("Наименование этапа (работы)").SimulateBold())
-                .SetTextAlignment(TextAlignment.CENTER));
-            table.AddHeaderCell(new Cell().Add(new Paragraph("Статус").SimulateBold())
-                .SetTextAlignment(TextAlignment.CENTER));
-            table.AddHeaderCell(new Cell().Add(new Paragraph("Срок сдачи").SimulateBold())
-                .SetTextAlignment(TextAlignment.CENTER));
+            // Таблица этапов
+            var table = new Table(UnitValue.CreatePercentArray(new float[] { 8, 50, 20, 22 }))
+                .UseAllAvailableWidth()
+                .SetMarginBottom(25);
 
-            var stages = report.Project.Stages.OrderBy(s => s.StageId).ToList(); 
+            // Заголовки таблицы
+            var headerCellStyle = new Style()
+                .SetFont(boldFont)
+                .SetFontSize(11)
+                .SetTextAlignment(TextAlignment.CENTER)
+                .SetPadding(8);
+
+            table.AddHeaderCell(new Cell().Add(new Paragraph("№").SetFont(boldFont)).AddStyle(headerCellStyle));
+            table.AddHeaderCell(new Cell().Add(new Paragraph("Наименование этапа (работы)").SetFont(boldFont)).AddStyle(headerCellStyle));
+            table.AddHeaderCell(new Cell().Add(new Paragraph("Статус").SetFont(boldFont)).AddStyle(headerCellStyle));
+            table.AddHeaderCell(new Cell().Add(new Paragraph("Срок сдачи").SetFont(boldFont)).AddStyle(headerCellStyle));
+
+            // Данные этапов
+            var stages = report.Project.Stages.OrderBy(s => s.StageId).ToList();
             int i = 1;
             foreach (var stage in stages)
             {
-                table.AddCell(new Cell().Add(new Paragraph(i.ToString())));
-                table.AddCell(new Cell().Add(new Paragraph(stage.Name)));
-                table.AddCell(new Cell().Add(new Paragraph(stage.Status.ToString()))
+                var cellStyle = new Style()
+                    .SetFont(regularFont)
+                    .SetFontSize(10)
+                    .SetPadding(6);
+
+                table.AddCell(new Cell().Add(new Paragraph(i.ToString())).AddStyle(cellStyle)
+                    .SetTextAlignment(TextAlignment.CENTER));
+                
+                table.AddCell(new Cell().Add(new Paragraph(stage.Name)).AddStyle(cellStyle));
+                
+                table.AddCell(new Cell().Add(new Paragraph(stage.Status.ToString())).AddStyle(cellStyle)
                     .SetTextAlignment(TextAlignment.CENTER));
 
                 if (config.IncludeDeadline)
                 {
-                    table.AddCell(new Cell().Add(new Paragraph(stage.Deadline.ToShortDateString()))
+                    table.AddCell(new Cell().Add(new Paragraph(stage.Deadline.ToString("dd.MM.yyyy"))).AddStyle(cellStyle)
                         .SetTextAlignment(TextAlignment.CENTER));
                 }
                 else
                 {
-                    table.AddCell(new Cell().Add(new Paragraph("—"))
+                    table.AddCell(new Cell().Add(new Paragraph("—")).AddStyle(cellStyle)
                         .SetTextAlignment(TextAlignment.CENTER));
                 }
 
@@ -309,22 +415,42 @@ public class ReportService : IReportService
 
             document.Add(table);
 
-            // --- 5. ЗАКЛЮЧЕНИЕ ---
-            document.Add(
-                new Paragraph(
-                        "Работы выполнены в полном объеме и соответствуют техническому заданию. Стороны претензий не имеют.")
-                    .SetFontSize(12).SetFirstLineIndent(30).SetMarginBottom(30));
+            // Заключение
+            document.Add(new Paragraph("Работы выполнены в полном объеме и соответствуют техническому заданию. Стороны претензий не имеют.")
+                .SetFont(regularFont)
+                .SetFontSize(12)
+                .SetFirstLineIndent(30)
+                .SetMarginTop(30)
+                .SetMarginBottom(50));
 
-            // --- 6. ПОДПИСИ ---
+            // Подписи
+            var signatureStyle = new Style()
+                .SetFont(regularFont)
+                .SetFontSize(12);
+
             document.Add(new Paragraph("Заказчик:")
-                .SetFontSize(12).SetMarginLeft(50));
-            document.Add(new Paragraph("\n___________________ / (Подпись)")
-                .SetFontSize(12).SetMarginLeft(50));
+                .SetFont(regularFont)
+                .SetFontSize(12)
+                .SetMarginLeft(50)
+                .SetMarginBottom(40));
+            
+            document.Add(new Paragraph("___________________ / (Подпись)")
+                .SetFont(regularFont)
+                .SetFontSize(11)
+                .SetMarginLeft(50)
+                .SetMarginBottom(20));
 
-            document.Add(new Paragraph("\nИсполнитель:")
-                .SetFontSize(12).SetMarginLeft(350).SetMarginTop(-40));
-            document.Add(new Paragraph("\n___________________ / (Подпись)")
-                .SetFontSize(12).SetMarginLeft(350));
+            document.Add(new Paragraph("Исполнитель:")
+                .SetFont(regularFont)
+                .SetFontSize(12)
+                .SetMarginLeft(350)
+                .SetMarginTop(-60)
+                .SetMarginBottom(40));
+            
+            document.Add(new Paragraph("___________________ / (Подпись)")
+                .SetFont(regularFont)
+                .SetFontSize(11)
+                .SetMarginLeft(350));
         }
 
         return ms.ToArray();
@@ -332,7 +458,6 @@ public class ReportService : IReportService
  
     private async Task<byte[]> GenerateExcelKpiAsync(Report report, dynamic config, ProjectManagementDbContext context) // Добавлен параметр context
     {
-        // Запрос данных этапов с переданным context
         var stages = await context.Stages
             .AsNoTracking()
             .Where(s => s.ProjectId == report.ProjectId)
@@ -417,11 +542,19 @@ public class ReportService : IReportService
         return package.GetAsByteArray();
     }
 
+    /// <summary>
+    /// Скачивает готовый файл отчета по его идентификатору.
+    /// </summary>
+    /// <param name="reportId">Идентификатор отчета.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Кортеж с байтами файла, типом контента и именем файла.</returns>
+    /// <exception cref="KeyNotFoundException">Отчет или файл не найден.</exception>
+    /// <exception cref="InvalidOperationException">Отчет не готов к скачиванию.</exception>
     public async Task<(byte[] FileBytes, string ContentType, string FileName)> DownloadReportAsync(
         int reportId,
         CancellationToken cancellationToken)
     {
-        using var context = await _contextFactory.CreateDbContextAsync(cancellationToken); // Локальный
+        using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var report = await context.Reports
             .AsNoTracking()
             .Include(r => r.Project)

@@ -43,12 +43,6 @@ public class SignalRNotificationSender : INotificationSender
                 "Notification {NotificationId} sent to group '{GroupName}'",
                 notification.NotificationId,
                 groupName);
-
-            await _hubContext.Clients.All.SendAsync("ReceiveNotification", notification);
-
-            _logger.LogDebug(
-                "Notification {NotificationId} also sent to all clients as backup",
-                notification.NotificationId);
         }
         catch (Exception ex)
         {

@@ -5,6 +5,7 @@ using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Contexts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services;
 
@@ -12,11 +13,16 @@ public class StagesService : IStageService
 {
     private readonly ProjectManagementDbContext _context;
     private readonly INotificationService _notificationService;
+    private readonly ILogger<StagesService> _logger;
 
-    public StagesService(ProjectManagementDbContext context, INotificationService notificationService)
+    public StagesService(
+        ProjectManagementDbContext context,
+        INotificationService notificationService,
+        ILogger<StagesService> logger)
     {
         _context = context;
         _notificationService = notificationService;
+        _logger = logger;
     }
 
     public async Task<int> CreateStageAsync(CreateStageRequest request, int projectId,
@@ -74,8 +80,12 @@ public class StagesService : IStageService
         await _context.Stages.AddAsync(newStage, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
-        // Уведомление для специалиста о назначении на новый этап
-        Console.WriteLine($"[StagesService] Stage created. StageId: {newStage.StageId}, Name: {newStage.Name}, SpecialistUserId: {newStage.SpecialistUserId}");
+        _logger.LogInformation(
+            "Stage created. StageId: {StageId}, Name: {Name}, SpecialistUserId: {SpecialistUserId}",
+            newStage.StageId,
+            newStage.Name,
+            newStage.SpecialistUserId);
+
         try
         {
             await _notificationService.CreateAndSendNotificationAsync(
@@ -83,11 +93,19 @@ public class StagesService : IStageService
                 newStage.ProjectId,
                 $"Вам назначен новый этап '{newStage.Name}' в проекте с ID {newStage.ProjectId}.",
                 cancellationToken);
-            Console.WriteLine("[StagesService] Creation notification for specialist sent successfully");
+
+            _logger.LogInformation(
+                "Creation notification sent successfully for stage {StageId} to specialist {SpecialistUserId}",
+                newStage.StageId,
+                newStage.SpecialistUserId);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[StagesService] ERROR sending creation notification: {ex.Message}");
+            _logger.LogError(
+                ex,
+                "Error sending creation notification for stage {StageId} to specialist {SpecialistUserId}",
+                newStage.StageId,
+                newStage.SpecialistUserId);
         }
 
         return newStage.StageId;

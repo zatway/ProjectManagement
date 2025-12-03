@@ -1,5 +1,6 @@
 using Application.DTOs.Input_DTO;
 using Application.DTOs.Output_DTO;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Application.Interfaces;
 
@@ -18,7 +19,7 @@ public interface IReportService
     /// <summary>
     /// Внутренний метод. Выыполняет реальную генерацию и сохранение файла.
     /// </summary>
-    Task GenerateAndSaveReport(int reportId);
+     Task GenerateAndSaveReport(int reportId, IServiceScopeFactory serviceScopeFactory);
     
     /// <summary>
     /// Получает список кратких моделей отчетов для данного проекта.
