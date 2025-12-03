@@ -13,11 +13,17 @@ public class StagesController : ControllerBase
 {
     private readonly IStageService _stageService;
 
+    /// <summary>
+    /// Контроллер для управления этапами проектов.
+    /// </summary>
     public StagesController(IStageService stageService)
     {
         _stageService = stageService;
     }
 
+    /// <summary>
+    /// Создает новый этап в рамках указанного проекта.
+    /// </summary>
     [HttpPost("~/api/stages/{projectId}")]
     [ProducesResponseType(typeof(int), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -43,6 +49,9 @@ public class StagesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Возвращает список всех этапов указанного проекта.
+    /// </summary>
     [HttpGet("~/api/stages/{projectId}/get-all")]
     [ProducesResponseType(typeof(IEnumerable<ShortStageResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -55,11 +64,13 @@ public class StagesController : ControllerBase
         }
         catch (KeyNotFoundException ex)
         {
-            // Проект не найден
             return NotFound(ex.Message);
         }
     }
 
+    /// <summary>
+    /// Возвращает детальную информацию об этапе по его идентификатору.
+    /// </summary>
     [HttpGet("~/api/stages/{stageId}/detail")]
     [ProducesResponseType(typeof(StageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -72,11 +83,13 @@ public class StagesController : ControllerBase
         }
         catch (KeyNotFoundException)
         {
-            // Этап не найден
             return NotFound();
         }
     }
 
+    /// <summary>
+    /// Обновляет информацию об этапе по его идентификатору.
+    /// </summary>
     [HttpPatch("~/api/stages/{stageId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -99,6 +112,9 @@ public class StagesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Удаляет этап по его идентификатору.
+    /// </summary>
     [HttpDelete("~/api/stages/{stageId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

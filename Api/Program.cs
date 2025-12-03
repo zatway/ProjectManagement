@@ -11,6 +11,7 @@ using Infrastructure.SignalR.Hubs;
 using Application.Interfaces.SignalR;
 using Infrastructure.Services.SignalR;
 using OfficeOpenXml;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -78,39 +79,29 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnMessageReceived = context =>
             {
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("JwtBearerEvents");
+
                 var path = context.HttpContext.Request.Path;
                 
-                // Если запрос идет к Hub'у (включая negotiation)
                 if (path.StartsWithSegments("/hubs/notifications"))
                 {
-                    Console.WriteLine($"[JWT Bearer] SignalR request for path: {path}");
-                    
-                    // Сначала пробуем получить токен из query string (для WebSocket и negotiation)
                     var accessToken = context.Request.Query["access_token"];
-                    Console.WriteLine($"[JWT Bearer] Token from query string: {(string.IsNullOrEmpty(accessToken) ? "NOT FOUND" : "FOUND")}");
                     
-                    // Если токена нет в query string, пробуем получить из заголовка Authorization
                     if (string.IsNullOrEmpty(accessToken))
                     {
                         var authHeader = context.Request.Headers["Authorization"].ToString();
-                        Console.WriteLine($"[JWT Bearer] Authorization header: {(string.IsNullOrEmpty(authHeader) ? "NOT FOUND" : "FOUND")}");
                         
                         if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                         {
                             accessToken = authHeader.Substring("Bearer ".Length).Trim();
-                            Console.WriteLine($"[JWT Bearer] Token extracted from Authorization header");
                         }
                     }
                     
                     if (!string.IsNullOrEmpty(accessToken))
                     {
-                        // Токен добавляется в контекст, чтобы его мог проверить JWT Bearer
                         context.Token = accessToken;
-                        Console.WriteLine($"[JWT Bearer] Token set in context");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"[JWT Bearer] WARNING: No token found in query string or Authorization header!");
                     }
                 }
 
@@ -118,23 +109,31 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             },
             OnAuthenticationFailed = context =>
             {
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("JwtBearerEvents");
+
                 var path = context.HttpContext.Request.Path;
                 if (path.StartsWithSegments("/hubs/notifications"))
                 {
-                    Console.WriteLine($"[JWT Bearer] Authentication failed for SignalR: {context.Exception?.Message}");
-                    Console.WriteLine($"[JWT Bearer] Exception type: {context.Exception?.GetType().Name}");
-                    // Не пробрасываем исключение для SignalR, чтобы не блокировать negotiation
                     context.NoResult();
                 }
                 return Task.CompletedTask;
             },
             OnChallenge = context =>
             {
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("JwtBearerEvents");
+
                 var path = context.HttpContext.Request.Path;
                 if (path.StartsWithSegments("/hubs/notifications"))
                 {
-                    Console.WriteLine($"[JWT Bearer] Challenge triggered for SignalR. Error: {context.Error}, ErrorDescription: {context.ErrorDescription}");
-                    // Для SignalR не отправляем challenge, чтобы не блокировать negotiation
+                    logger.LogDebug(
+                        "JWT challenge triggered for SignalR. Error: {Error}, Description: {Description}",
+                        context.Error,
+                        context.ErrorDescription);
+
                     context.HandleResponse();
                 }
                 return Task.CompletedTask;
@@ -276,7 +275,9 @@ async Task SeedDataAsync(IHost app)
             context.Stages.Add(testStage);
             await context.SaveChangesAsync();
 
-            Console.WriteLine("Базовые тестовые данные успешно добавлены.");
+            var logger = services.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("SeedData");
+            logger.LogInformation("Базовые тестовые данные успешно добавлены.");
         }
     }
 }

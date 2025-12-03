@@ -14,11 +14,17 @@ public class ProjectsController : ControllerBase
 {
     private readonly IProjectService _projectService;
 
+    /// <summary>
+    /// Контроллер для управления проектами.
+    /// </summary>
     public ProjectsController(IProjectService projectService)
     {
         _projectService = projectService;
     }
 
+    /// <summary>
+    /// Возвращает детальную информацию о проекте по идентификатору.
+    /// </summary>
     [HttpGet("~/api/projects/{id}/detail")]
     [ProducesResponseType(typeof(ProjectResponse), 200)]
     [ProducesResponseType(404)]
@@ -34,7 +40,10 @@ public class ProjectsController : ControllerBase
             return NotFound();
         }
     }
-
+    
+    /// <summary>
+    /// Возвращает список всех проектов в укороченном представлении.
+    /// </summary>
     [HttpGet("~/api/projects/all")]
     [ProducesResponseType(typeof(ShortProjectResponse[]), 200)]
     [ProducesResponseType(404)]
@@ -51,6 +60,9 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Обновляет данные существующего проекта.
+    /// </summary>
     [HttpPatch("~/api/projects/{id}/update")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
@@ -68,6 +80,9 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Создает новый проект от имени текущего пользователя.
+    /// </summary>
     [HttpPost("~/api/projects/create")]
     [ProducesResponseType(typeof(int), 200)]
     [ProducesResponseType(400)]
@@ -97,6 +112,9 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Удаляет проект по идентификатору.
+    /// </summary>
     [HttpDelete("~/api/projects/{id}/delete")]
     [ProducesResponseType(204)]
     [ProducesResponseType(400)]

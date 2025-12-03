@@ -10,7 +10,7 @@ using System;
 using System.Linq;
 using Application.DTOs.Output_DTO.SignalR;
 using Infrastructure.Contexts;
-using Infrastructure.Services; 
+using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services;
 
@@ -18,21 +18,25 @@ public class NotificationService : INotificationService
 {
     private readonly ProjectManagementDbContext _context;
     private readonly INotificationSender _notificationSender;
+    private readonly ILogger<NotificationService> _logger;
 
-    public NotificationService(ProjectManagementDbContext context, INotificationSender notificationSender)
+    public NotificationService(
+        ProjectManagementDbContext context,
+        INotificationSender notificationSender,
+        ILogger<NotificationService> logger)
     {
         _context = context;
         _notificationSender = notificationSender;
+        _logger = logger;
     }
 
     /// <summary>
-    /// Получает все уведомления для конкретного пользователя.
+    /// Возвращает все уведомления (прочитанные и непрочитанные) для указанного пользователя.
     /// </summary>
     public async Task<IEnumerable<NotificationResponse>> GetNotificationsByUserIdAsync(
         int userId,
         CancellationToken cancellationToken)
     {
-        // 1. Получаем уведомления, включая связанный проект для ProjectName
         var notifications = await _context.Notifications
             .AsNoTracking()
             .Where(n => n.UserId == userId)
@@ -52,6 +56,12 @@ public class NotificationService : INotificationService
         return notifications;
     }
     
+    /// <summary>
+    /// Отмечает уведомление как прочитанное для указанного пользователя.
+    /// </summary>
+    /// <param name="notificationId">Идентификатор уведомления.</param>
+    /// <param name="userId">Идентификатор пользователя‑владельца уведомления.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
     public async Task MarkAsReadAsync(int notificationId, int userId, CancellationToken cancellationToken)
     {
         var notification = await _context.Notifications
@@ -74,6 +84,12 @@ public class NotificationService : INotificationService
         }
     }
 
+    /// <summary>
+    /// Удаляет уведомление пользователя.
+    /// </summary>
+    /// <param name="notificationId">Идентификатор уведомления.</param>
+    /// <param name="userId">Идентификатор пользователя‑владельца уведомления.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
     public async Task DeleteNotificationAsync(int notificationId, int userId, CancellationToken cancellationToken)
     {
         var notification = await _context.Notifications
@@ -96,10 +112,18 @@ public class NotificationService : INotificationService
     /// <summary>
     /// Создает уведомление в базе данных и отправляет его через SignalR.
     /// </summary>
+    /// <param name="userId">Идентификатор пользователя‑получателя уведомления.</param>
+    /// <param name="projectId">Идентификатор связанного проекта.</param>
+    /// <param name="message">Текст уведомления.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
     public async Task CreateAndSendNotificationAsync(int userId, int projectId, string message, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[NotificationService] CreateAndSendNotificationAsync called. UserId: {userId}, ProjectId: {projectId}, Message: {message}");
-        
+        _logger.LogDebug(
+            "Creating notification. UserId: {UserId}, ProjectId: {ProjectId}, Message: {Message}",
+            userId,
+            projectId,
+            message);
+
         var project = await _context.Projects
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.ProjectId == projectId, cancellationToken);
@@ -119,8 +143,12 @@ public class NotificationService : INotificationService
 
         await _context.Notifications.AddAsync(notification, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
-        
-        Console.WriteLine($"[NotificationService] Notification saved to DB. NotificationId: {notification.NotificationId}");
+
+        _logger.LogInformation(
+            "Notification saved to DB. NotificationId: {NotificationId}, UserId: {UserId}, ProjectId: {ProjectId}",
+            notification.NotificationId,
+            notification.UserId,
+            notification.ProjectId);
         
         var notificationDto = new NotificationResponse
         {
@@ -133,8 +161,8 @@ public class NotificationService : INotificationService
             CreatedAt = notification.CreatedAt
         };
 
-        Console.WriteLine($"[NotificationService] Calling SendNotificationAsync...");
+        _logger.LogDebug("Sending notification {NotificationId} to user {UserId} via SignalR", notification.NotificationId, notification.UserId);
         await _notificationSender.SendNotificationAsync(notificationDto);
-        Console.WriteLine($"[NotificationService] SendNotificationAsync completed");
+        _logger.LogInformation("Notification {NotificationId} sent to user {UserId}", notification.NotificationId, notification.UserId);
     }
 }

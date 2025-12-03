@@ -9,11 +9,17 @@ public class UsersController : ControllerBase
 {
     private readonly IUsersService _usersService;
 
+    /// <summary>
+    /// Контроллер для работы с пользователями.
+    /// </summary>
     public UsersController(IUsersService usersService)
     {
         _usersService = usersService;
     }
     
+    /// <summary>
+    /// Возвращает список всех пользователей системы.
+    /// </summary>
     [HttpGet("~/api/users/all")]
     [ProducesResponseType(typeof(IEnumerable<UserResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -26,7 +32,6 @@ public class UsersController : ControllerBase
         }
         catch (KeyNotFoundException ex)
         {
-            // Проект не найден
             return NotFound(ex.Message);
         }
     }

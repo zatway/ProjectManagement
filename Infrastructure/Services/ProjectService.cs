@@ -4,6 +4,7 @@ using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Contexts;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Services;
@@ -15,13 +16,23 @@ public class ProjectService : IProjectService
 {
     private readonly ProjectManagementDbContext _context;
     private readonly INotificationService _notificationService;
+    private readonly ILogger<ProjectService> _logger;
 
-    public ProjectService(ProjectManagementDbContext context, INotificationService notificationService)
+    public ProjectService(
+        ProjectManagementDbContext context,
+        INotificationService notificationService,
+        ILogger<ProjectService> logger)
     {
         _context = context;
         _notificationService = notificationService;
+        _logger = logger;
     }
 
+    /// <summary>
+    /// Возвращает детальную информацию о проекте по его идентификатору.
+    /// </summary>
+    /// <param name="projectId">Идентификатор проекта.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
     public async Task<ProjectResponse> GetProjectByIdAsync(int projectId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -47,6 +58,12 @@ public class ProjectService : IProjectService
         return project;
     }
 
+    /// <summary>
+    /// Обновляет свойства проекта, включая статус, основные поля и даты.
+    /// </summary>
+    /// <param name="projectId">Идентификатор проекта.</param>
+    /// <param name="request">Модель с изменяемыми полями проекта.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
     public async Task UpdateProjectAsync(int projectId, UpdateProjectRequest request,
         CancellationToken cancellationToken)
     {
@@ -77,7 +94,6 @@ public class ProjectService : IProjectService
             }
         }
 
-        // Используем оператор 'is not null' для ссылочных типов (string?)
         if (request.Name is not null)
         {
             project.Name = request.Name;
@@ -88,7 +104,6 @@ public class ProjectService : IProjectService
             project.Description = request.Description;
         }
 
-        // Используем .HasValue для значимых nullable-типов (decimal?, DateTime?)
         if (request.Budget.HasValue)
         {
             if (request.Budget.Value <= 0)
@@ -106,7 +121,6 @@ public class ProjectService : IProjectService
 
         if (request.EndDate.HasValue)
         {
-            // 💡Проверка, что EndDate > StartDate
             if (request.EndDate.Value < project.StartDate)
             {
                 throw new ArgumentException("Дата завершения не может быть раньше даты начала.");
@@ -117,24 +131,49 @@ public class ProjectService : IProjectService
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        // Уведомление при смене статуса
-        Console.WriteLine($"[ProjectService] Checking notification condition. request.Status: {request.Status}, oldStatus: {oldStatus}, newStatus: {project.Status}");
+        _logger.LogDebug(
+            "Checking notification condition for project {ProjectId}. RequestedStatus: {RequestedStatus}, OldStatus: {OldStatus}, NewStatus: {NewStatus}",
+            project.ProjectId,
+            request.Status,
+            oldStatus,
+            project.Status);
+
         if (request.Status is not null && oldStatus != project.Status)
         {
-            Console.WriteLine($"[ProjectService] Status changed! Creating notification for user {project.CreatedByUserId}, project {project.ProjectId}");
+            _logger.LogInformation(
+                "Project status changed. Creating notification for user {UserId}, project {ProjectId} (from {OldStatus} to {NewStatus})",
+                project.CreatedByUserId,
+                project.ProjectId,
+                oldStatus,
+                project.Status);
+
             await _notificationService.CreateAndSendNotificationAsync(
                 project.CreatedByUserId,
                 project.ProjectId,
                 $"Статус проекта '{project.Name}' изменен с '{oldStatus}' на '{project.Status}'.",
                 cancellationToken);
-            Console.WriteLine($"[ProjectService] Notification creation completed");
+
+            _logger.LogInformation(
+                "Status-change notification created for user {UserId}, project {ProjectId}",
+                project.CreatedByUserId,
+                project.ProjectId);
         }
         else
         {
-            Console.WriteLine($"[ProjectService] Notification condition not met. request.Status is null: {request.Status is null}, status changed: {oldStatus != project.Status}");
+            _logger.LogDebug(
+                "Notification condition not met for project {ProjectId}. StatusInRequestNull: {IsNull}, StatusChanged: {StatusChanged}",
+                project.ProjectId,
+                request.Status is null,
+                oldStatus != project.Status);
         }
     }
 
+    /// <summary>
+    /// Создает новый проект и возвращает его идентификатор.
+    /// </summary>
+    /// <param name="request">Модель с данными создаваемого проекта.</param>
+    /// <param name="createdByUserId">Идентификатор пользователя‑создателя.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
     public async Task<int> CreateProjectAsync(CreateProjectRequest request, int createdByUserId,
         CancellationToken cancellationToken)
     {
@@ -159,8 +198,12 @@ public class ProjectService : IProjectService
         await _context.Projects.AddAsync(newProject, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
-        // Уведомление о создании проекта для создателя
-        Console.WriteLine($"[ProjectService] Project created. ProjectId: {newProject.ProjectId}, Name: {newProject.Name}, CreatedByUserId: {createdByUserId}");
+        _logger.LogInformation(
+            "Project created. ProjectId: {ProjectId}, Name: {Name}, CreatedByUserId: {UserId}",
+            newProject.ProjectId,
+            newProject.Name,
+            createdByUserId);
+
         try
         {
             await _notificationService.CreateAndSendNotificationAsync(
@@ -168,16 +211,28 @@ public class ProjectService : IProjectService
                 newProject.ProjectId,
                 $"Проект '{newProject.Name}' был создан.",
                 cancellationToken);
-            Console.WriteLine("[ProjectService] Creation notification sent successfully");
+
+            _logger.LogInformation(
+                "Creation notification sent successfully for project {ProjectId} to user {UserId}",
+                newProject.ProjectId,
+                createdByUserId);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ProjectService] ERROR sending creation notification: {ex.Message}");
+            _logger.LogError(
+                ex,
+                "Error while sending creation notification for project {ProjectId} to user {UserId}",
+                newProject.ProjectId,
+                createdByUserId);
         }
 
         return newProject.ProjectId;
     }
 
+    /// <summary>
+    /// Возвращает список всех проектов в укороченном представлении.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
     public async Task<IEnumerable<ShortProjectResponse>> GetAllProjectsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -197,6 +252,11 @@ public class ProjectService : IProjectService
         return projects;
     }
 
+    /// <summary>
+    /// Удаляет проект по его идентификатору.
+    /// </summary>
+    /// <param name="projectId">Идентификатор удаляемого проекта.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
     public async Task DeleteProjectAsync(int projectId, CancellationToken cancellationToken)
     {
         if (projectId <= 0)
@@ -211,7 +271,6 @@ public class ProjectService : IProjectService
 
         if (project == null)
         {
-            // Возвращаем исключение, которое в контроллере будет преобразовано в 404 Not Found
             throw new KeyNotFoundException($"Проект с ID {projectId} не найден для удаления.");
         }
 

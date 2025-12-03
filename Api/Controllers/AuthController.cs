@@ -1,7 +1,6 @@
 using Application.DTOs.Input_DTO;
 using Application.DTOs.Output_DTO;
 using Application.Interfaces;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 namespace Api.Controllers;
 
@@ -9,11 +8,17 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     
+    /// <summary>
+    /// Контроллер для операций аутентификации и регистрации пользователей.
+    /// </summary>
     public AuthController(IAuthService authService)
     {
         _authService = authService;
     }
 
+    /// <summary>
+    /// Аутентифицирует пользователя и выдает JWT-токен и Refresh Token.
+    /// </summary>
     [HttpPost("login")]
     [ProducesResponseType(typeof(LoginResponse), 200)]
     [ProducesResponseType(401)]
@@ -30,6 +35,9 @@ public class AuthController : ControllerBase
         }
     }
     
+    /// <summary>
+    /// Регистрирует нового пользователя в системе.
+    /// </summary>
     [HttpPost("register")]
     [ProducesResponseType(201)]
     [ProducesResponseType(400)]
@@ -42,11 +50,13 @@ public class AuthController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            // Например: "Пользователь с таким именем уже существует."
             return BadRequest(ex.Message);
         }
     }
     
+    /// <summary>
+    /// Обновляет пару токенов доступа по действующему Refresh Token.
+    /// </summary>
     [HttpPost("refresh")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

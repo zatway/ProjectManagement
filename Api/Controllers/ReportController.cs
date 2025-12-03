@@ -14,13 +14,16 @@ public class ReportController : ControllerBase
 {
     private readonly IReportService _reportService;
 
+    /// <summary>
+    /// Контроллер для работы с отчетами.
+    /// </summary>
     public ReportController(IReportService reportService)
     {
         _reportService = reportService;
     }
 
     /// <summary>
-    /// Запускает асинхронную генерацию нового отчета.
+    /// Запускает асинхронную генерацию нового отчета по проекту.
     /// </summary>
     [HttpPost("generate")]
     [ProducesResponseType(typeof(ReportResponse), StatusCodes.Status202Accepted)]
@@ -56,7 +59,7 @@ public class ReportController : ControllerBase
     }
 
     /// <summary>
-    /// Скачивает готовый файл отчета по его ID.
+    /// Скачивает готовый файл отчета по его идентификатору.
     /// </summary>
     [HttpGet("{reportId}/download")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
@@ -81,7 +84,10 @@ public class ReportController : ControllerBase
         }
     }
     
-    [HttpGet("{projectId}/projects")] // Маршрут, привязанный к проекту
+    /// <summary>
+    /// Возвращает список кратких сведений об отчетах по указанному проекту.
+    /// </summary>
+    [HttpGet("{projectId}/projects")]
     [ProducesResponseType(typeof(IEnumerable<ShortReportResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetReportsByProject(int projectId, CancellationToken cancellationToken)
