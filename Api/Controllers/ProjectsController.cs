@@ -8,8 +8,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Api.Controllers;
 
 [Authorize(Roles = "Administrator,Specialist")]
-[Route("api/[controller]")]
 [ApiController]
+[Route("/api/projects")]
 public class ProjectsController : ControllerBase
 {
     private readonly IProjectService _projectService;
@@ -19,7 +19,7 @@ public class ProjectsController : ControllerBase
         _projectService = projectService;
     }
 
-    [HttpGet("{id}")]
+    [HttpGet("~/api/projects/{id}/detail")]
     [ProducesResponseType(typeof(ProjectResponse), 200)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetDetailsProject(int id, CancellationToken cancellationToken)
@@ -35,7 +35,7 @@ public class ProjectsController : ControllerBase
         }
     }
 
-    [HttpGet("all")]
+    [HttpGet("~/api/projects/all")]
     [ProducesResponseType(typeof(ShortProjectResponse[]), 200)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetAllShortProjects(CancellationToken cancellationToken)
@@ -51,7 +51,7 @@ public class ProjectsController : ControllerBase
         }
     }
 
-    [HttpPatch("update/{id}")]
+    [HttpPatch("~/api/projects/{id}/update")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> UpdateProject(int id, UpdateProjectRequest request,
@@ -68,7 +68,7 @@ public class ProjectsController : ControllerBase
         }
     }
 
-    [HttpPost("create")]
+    [HttpPost("~/api/projects/create")]
     [ProducesResponseType(typeof(int), 200)]
     [ProducesResponseType(400)]
     public async Task<IActionResult> CreateProject(
@@ -97,7 +97,7 @@ public class ProjectsController : ControllerBase
         }
     }
 
-    [HttpDelete("delete/{id}")]
+    [HttpDelete("~/api/projects/{id}/delete")]
     [ProducesResponseType(204)]
     [ProducesResponseType(400)]
     public async Task<IActionResult> DeleteProject(int id, CancellationToken cancellationToken)

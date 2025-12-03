@@ -18,7 +18,7 @@ public class StagesController : ControllerBase
         _stageService = stageService;
     }
 
-    [HttpPost("~/api/projects/{projectId}/stages")]
+    [HttpPost("~/api/stages/{projectId}")]
     [ProducesResponseType(typeof(int), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -43,7 +43,7 @@ public class StagesController : ControllerBase
         }
     }
 
-    [HttpGet("~/api/projects/{projectId}/stages")]
+    [HttpGet("~/api/stages/{projectId}/get-all")]
     [ProducesResponseType(typeof(IEnumerable<ShortStageResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetAllStages(int projectId, CancellationToken cancellationToken)
@@ -60,7 +60,7 @@ public class StagesController : ControllerBase
         }
     }
 
-    [HttpGet("{stageId}")]
+    [HttpGet("~/api/stages/{stageId}/detail")]
     [ProducesResponseType(typeof(StageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetStageDetail(int stageId, CancellationToken cancellationToken)
@@ -77,7 +77,7 @@ public class StagesController : ControllerBase
         }
     }
 
-    [HttpPatch("{stageId}")]
+    [HttpPatch("~/api/stages/{stageId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -99,7 +99,7 @@ public class StagesController : ControllerBase
         }
     }
 
-    [HttpDelete("{stageId}")]
+    [HttpDelete("~/api/stages/{stageId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

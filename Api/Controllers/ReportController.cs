@@ -81,7 +81,7 @@ public class ReportController : ControllerBase
         }
     }
     
-    [HttpGet("~/api/projects/{projectId}/reports")] // Маршрут, привязанный к проекту
+    [HttpGet("{projectId}/projects")] // Маршрут, привязанный к проекту
     [ProducesResponseType(typeof(IEnumerable<ShortReportResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetReportsByProject(int projectId, CancellationToken cancellationToken)
