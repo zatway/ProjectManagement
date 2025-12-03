@@ -74,6 +74,22 @@ public class StagesService : IStageService
         await _context.Stages.AddAsync(newStage, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
+        // Уведомление для специалиста о назначении на новый этап
+        Console.WriteLine($"[StagesService] Stage created. StageId: {newStage.StageId}, Name: {newStage.Name}, SpecialistUserId: {newStage.SpecialistUserId}");
+        try
+        {
+            await _notificationService.CreateAndSendNotificationAsync(
+                newStage.SpecialistUserId,
+                newStage.ProjectId,
+                $"Вам назначен новый этап '{newStage.Name}' в проекте с ID {newStage.ProjectId}.",
+                cancellationToken);
+            Console.WriteLine("[StagesService] Creation notification for specialist sent successfully");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[StagesService] ERROR sending creation notification: {ex.Message}");
+        }
+
         return newStage.StageId;
     }
 

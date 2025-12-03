@@ -1,10 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
-using Application.Interfaces.SignalR;
 using System.Linq;
 
-namespace Api.Hubs;
+namespace Infrastructure.SignalR.Hubs;
 
 [Authorize] 
 public class NotificationHub : Hub
@@ -18,8 +17,7 @@ public class NotificationHub : Hub
         Console.WriteLine($"[SignalR] User claims count: {Context.User?.Claims?.Count() ?? 0}");
         
         // 1. Получаем ID пользователя из Claims (используем тот же ClaimTypes.NameIdentifier)
-        var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
-        
+        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier).Value;
         Console.WriteLine($"[SignalR] UserId from claims: {userId ?? "null"}");
         
         if (!string.IsNullOrEmpty(userId))
@@ -42,7 +40,7 @@ public class NotificationHub : Hub
     // Метод, который вызывается при разрыве соединения
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier).Value;
         
         if (!string.IsNullOrEmpty(userId))
         {
@@ -56,3 +54,4 @@ public class NotificationHub : Hub
     // 💡 Примечание: Мы не добавляем здесь методы, которые клиент может вызвать.
     // Наш хаб используется только для маршрутизации сообщений Server -> Client.
 }
+

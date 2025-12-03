@@ -118,13 +118,20 @@ public class ProjectService : IProjectService
         await _context.SaveChangesAsync(cancellationToken);
 
         // Уведомление при смене статуса
+        Console.WriteLine($"[ProjectService] Checking notification condition. request.Status: {request.Status}, oldStatus: {oldStatus}, newStatus: {project.Status}");
         if (request.Status is not null && oldStatus != project.Status)
         {
+            Console.WriteLine($"[ProjectService] Status changed! Creating notification for user {project.CreatedByUserId}, project {project.ProjectId}");
             await _notificationService.CreateAndSendNotificationAsync(
                 project.CreatedByUserId,
                 project.ProjectId,
                 $"Статус проекта '{project.Name}' изменен с '{oldStatus}' на '{project.Status}'.",
                 cancellationToken);
+            Console.WriteLine($"[ProjectService] Notification creation completed");
+        }
+        else
+        {
+            Console.WriteLine($"[ProjectService] Notification condition not met. request.Status is null: {request.Status is null}, status changed: {oldStatus != project.Status}");
         }
     }
 
@@ -148,8 +155,26 @@ public class ProjectService : IProjectService
             Status = ProjectStatus.Planning,
             CreatedByUserId = createdByUserId,
         };
+
         await _context.Projects.AddAsync(newProject, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Уведомление о создании проекта для создателя
+        Console.WriteLine($"[ProjectService] Project created. ProjectId: {newProject.ProjectId}, Name: {newProject.Name}, CreatedByUserId: {createdByUserId}");
+        try
+        {
+            await _notificationService.CreateAndSendNotificationAsync(
+                createdByUserId,
+                newProject.ProjectId,
+                $"Проект '{newProject.Name}' был создан.",
+                cancellationToken);
+            Console.WriteLine("[ProjectService] Creation notification sent successfully");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ProjectService] ERROR sending creation notification: {ex.Message}");
+        }
+
         return newProject.ProjectId;
     }
 

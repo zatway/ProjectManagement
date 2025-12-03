@@ -98,6 +98,8 @@ public class NotificationService : INotificationService
     /// </summary>
     public async Task CreateAndSendNotificationAsync(int userId, int projectId, string message, CancellationToken cancellationToken)
     {
+        Console.WriteLine($"[NotificationService] CreateAndSendNotificationAsync called. UserId: {userId}, ProjectId: {projectId}, Message: {message}");
+        
         var project = await _context.Projects
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.ProjectId == projectId, cancellationToken);
@@ -117,7 +119,9 @@ public class NotificationService : INotificationService
 
         await _context.Notifications.AddAsync(notification, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
-
+        
+        Console.WriteLine($"[NotificationService] Notification saved to DB. NotificationId: {notification.NotificationId}");
+        
         var notificationDto = new NotificationResponse
         {
             NotificationId = notification.NotificationId,
@@ -129,6 +133,8 @@ public class NotificationService : INotificationService
             CreatedAt = notification.CreatedAt
         };
 
+        Console.WriteLine($"[NotificationService] Calling SendNotificationAsync...");
         await _notificationSender.SendNotificationAsync(notificationDto);
+        Console.WriteLine($"[NotificationService] SendNotificationAsync completed");
     }
 }

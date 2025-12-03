@@ -7,7 +7,7 @@ using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Contexts;
 using Infrastructure.Services;
-using Api.Hubs;
+using Infrastructure.SignalR.Hubs;
 using Application.Interfaces.SignalR;
 using Infrastructure.Services.SignalR;
 using OfficeOpenXml;
@@ -45,7 +45,8 @@ builder.Services.AddCors(options =>
         policy.WithOrigins("http://localhost:5174") // Добавьте свои
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .AllowCredentials();
+            .AllowCredentials()
+            .SetIsOriginAllowed(_ => true); // Для SignalR WebSocket
     });
 });
 
@@ -79,12 +80,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             {
                 var path = context.HttpContext.Request.Path;
                 
-                // Если запрос идет к Hub'у
+                // Если запрос идет к Hub'у (включая negotiation)
                 if (path.StartsWithSegments("/hubs/notifications"))
                 {
-                    Console.WriteLine($"[JWT Bearer] SignalR negotiation request for path: {path}");
+                    Console.WriteLine($"[JWT Bearer] SignalR request for path: {path}");
                     
-                    // Сначала пробуем получить токен из query string (для WebSocket)
+                    // Сначала пробуем получить токен из query string (для WebSocket и negotiation)
                     var accessToken = context.Request.Query["access_token"];
                     Console.WriteLine($"[JWT Bearer] Token from query string: {(string.IsNullOrEmpty(accessToken) ? "NOT FOUND" : "FOUND")}");
                     
@@ -105,6 +106,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     {
                         // Токен добавляется в контекст, чтобы его мог проверить JWT Bearer
                         context.Token = accessToken;
+                        Console.WriteLine($"[JWT Bearer] Token set in context");
                     }
                     else
                     {
@@ -116,12 +118,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             },
             OnAuthenticationFailed = context =>
             {
-                Console.WriteLine($"[JWT Bearer] Authentication failed: {context.Exception?.Message}");
+                var path = context.HttpContext.Request.Path;
+                if (path.StartsWithSegments("/hubs/notifications"))
+                {
+                    Console.WriteLine($"[JWT Bearer] Authentication failed for SignalR: {context.Exception?.Message}");
+                    Console.WriteLine($"[JWT Bearer] Exception type: {context.Exception?.GetType().Name}");
+                    // Не пробрасываем исключение для SignalR, чтобы не блокировать negotiation
+                    context.NoResult();
+                }
                 return Task.CompletedTask;
             },
             OnChallenge = context =>
             {
-                Console.WriteLine($"[JWT Bearer] Challenge triggered. Error: {context.Error}, ErrorDescription: {context.ErrorDescription}");
+                var path = context.HttpContext.Request.Path;
+                if (path.StartsWithSegments("/hubs/notifications"))
+                {
+                    Console.WriteLine($"[JWT Bearer] Challenge triggered for SignalR. Error: {context.Error}, ErrorDescription: {context.ErrorDescription}");
+                    // Для SignalR не отправляем challenge, чтобы не блокировать negotiation
+                    context.HandleResponse();
+                }
                 return Task.CompletedTask;
             }
         };
@@ -131,6 +146,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true; // Включаем детальные ошибки для отладки
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15); // Keep-alive для соединения
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30); // Таймаут клиента
 });
 
 builder.Services.AddControllers();
@@ -183,9 +200,6 @@ if (app.Environment.IsDevelopment())
     // await SeedDataAsync(app);
 }
 
-app.UseHttpsRedirection();
-
-// ВАЖЕН ПОРЯДОК
 app.UseRouting();
 
 app.UseCors("AllowSpecificOrigins");
@@ -193,6 +207,7 @@ app.UseCors("AllowSpecificOrigins");
 app.UseAuthentication();
 
 app.UseAuthorization();
+
 
 app.UseEndpoints(endpoints =>
 {
