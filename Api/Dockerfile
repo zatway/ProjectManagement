@@ -15,6 +15,7 @@ COPY Api/Api.csproj ./Api/
 COPY Application/Application.csproj ./Application/
 COPY Domain/Domain.csproj ./Domain/
 COPY Infrastructure/Infrastructure.csproj ./Infrastructure/
+COPY Test/Test.csproj ./Test/
 # Test не копируем — он не нужен для публикации Api
 
 RUN dotnet restore ProjectManagement.sln
