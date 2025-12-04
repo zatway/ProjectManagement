@@ -44,7 +44,10 @@ public class ProjectService : IProjectService
             {
                 ProjectId = p.ProjectId,
                 Name = p.Name,
+                Description = p.Description,
                 Budget = p.Budget,
+                StartDate = p.StartDate,
+                EndDate = p.EndDate,
                 Status = p.Status.ToString(),
                 StagesCount = p.Stages.Count
             })
@@ -114,19 +117,45 @@ public class ProjectService : IProjectService
             project.Budget = request.Budget.Value;
         }
 
-        if (request.StartDate.HasValue)
+        _logger.LogDebug(
+            "Обновление проекта {ProjectId}. StartDate.HasValue: {StartDateHasValue}, StartDate: {StartDate}, EndDate.HasValue: {EndDateHasValue}, EndDate: {EndDate}",
+            projectId,
+            request.StartDate.HasValue,
+            request.StartDate.HasValue ? request.StartDate.Value.ToString("O") : "null",
+            request.EndDate.HasValue,
+            request.EndDate.HasValue ? request.EndDate.Value.ToString("O") : "null");
+
+        if (request.StartDate.HasValue && request.StartDate.Value != default(DateTime) && request.StartDate.Value.Year > 1900)
         {
-            project.StartDate = request.StartDate.Value;
+            var startDateUtc = request.StartDate.Value.Kind == DateTimeKind.Unspecified 
+                ? DateTime.SpecifyKind(request.StartDate.Value, DateTimeKind.Utc)
+                : request.StartDate.Value.ToUniversalTime();
+            
+            project.StartDate = startDateUtc;
+            _logger.LogInformation("Обновлена дата начала проекта {ProjectId}: {StartDate} (UTC)", projectId, project.StartDate.ToString("O"));
+        }
+        else if (request.StartDate.HasValue)
+        {
+            _logger.LogWarning("Пропущена некорректная дата начала проекта {ProjectId}: {StartDate}", projectId, request.StartDate.Value);
         }
 
-        if (request.EndDate.HasValue)
+        if (request.EndDate.HasValue && request.EndDate.Value != default(DateTime) && request.EndDate.Value.Year > 1900)
         {
-            if (request.EndDate.Value < project.StartDate)
+            var endDateUtc = request.EndDate.Value.Kind == DateTimeKind.Unspecified 
+                ? DateTime.SpecifyKind(request.EndDate.Value, DateTimeKind.Utc)
+                : request.EndDate.Value.ToUniversalTime();
+            
+            if (endDateUtc < project.StartDate)
             {
                 throw new ArgumentException("Дата завершения не может быть раньше даты начала.");
             }
 
-            project.EndDate = request.EndDate.Value;
+            project.EndDate = endDateUtc;
+            _logger.LogInformation("Обновлена дата завершения проекта {ProjectId}: {EndDate} (UTC)", projectId, project.EndDate.ToString("O"));
+        }
+        else if (request.EndDate.HasValue)
+        {
+            _logger.LogWarning("Пропущена некорректная дата завершения проекта {ProjectId}: {EndDate}", projectId, request.EndDate.Value);
         }
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -177,23 +206,42 @@ public class ProjectService : IProjectService
     public async Task<int> CreateProjectAsync(CreateProjectRequest request, int createdByUserId,
         CancellationToken cancellationToken)
     {
-        if (request.EndDate < request.StartDate)
+        cancellationToken.ThrowIfCancellationRequested();
+
+        _logger.LogDebug(
+            "Создание проекта. StartDate: {StartDate}, EndDate: {EndDate}",
+            request.StartDate.ToString("O"),
+            request.EndDate.ToString("O"));
+
+        var startDateUtc = request.StartDate.Kind == DateTimeKind.Unspecified 
+            ? DateTime.SpecifyKind(request.StartDate, DateTimeKind.Utc)
+            : request.StartDate.ToUniversalTime();
+        
+        var endDateUtc = request.EndDate.Kind == DateTimeKind.Unspecified 
+            ? DateTime.SpecifyKind(request.EndDate, DateTimeKind.Utc)
+            : request.EndDate.ToUniversalTime();
+
+        if (endDateUtc < startDateUtc)
         {
             throw new ArgumentException("Дата завершения не может быть раньше даты начала.");
         }
-
-        cancellationToken.ThrowIfCancellationRequested();
 
         var newProject = new Project
         {
             Name = request.Name,
             Description = request.Description,
             Budget = request.Budget,
-            StartDate = request.StartDate,
-            EndDate = request.EndDate,
+            StartDate = startDateUtc,
+            EndDate = endDateUtc,
             Status = ProjectStatus.Planning,
             CreatedByUserId = createdByUserId,
+            CreatedAt = DateTime.UtcNow
         };
+
+        _logger.LogDebug(
+            "Проект подготовлен к созданию. StartDate (UTC): {StartDate}, EndDate (UTC): {EndDate}",
+            newProject.StartDate.ToString("O"),
+            newProject.EndDate.ToString("O"));
 
         await _context.Projects.AddAsync(newProject, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
