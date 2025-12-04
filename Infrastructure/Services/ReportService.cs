@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Linq;
 using Application.DTOs.Input_DTO;
 using Application.DTOs.Output_DTO;
@@ -168,15 +167,7 @@ public class ReportService : IReportService
             _logger.LogWarning(ex, "Не удалось отправить уведомление о создании отчета {ReportId}", newReport.ReportId);
         }
 
-        // Локально генерируем отчет в фоне, а в проде — синхронно, чтобы избежать потери фоновой задачи
-        if (_environment.IsDevelopment())
-        {
-            _ = Task.Run(async () => { await GenerateAndSaveReport(newReport.ReportId, _serviceScopeFactory); });
-        }
-        else
-        {
-            await GenerateAndSaveReport(newReport.ReportId, _serviceScopeFactory);
-        }
+        _ = Task.Run(async () => { await GenerateAndSaveReport(newReport.ReportId, _serviceScopeFactory); });
 
         return new ReportResponse
         {
@@ -438,7 +429,7 @@ public class ReportService : IReportService
                 .SetTextAlignment(TextAlignment.CENTER)
                 .SetMarginBottom(5));
             
-            document.Add(new Paragraph($"от {report.GeneratedAt.ToString("dd MMMM yyyy", new CultureInfo("ru-RU"))} г.")
+            document.Add(new Paragraph($"от {report.GeneratedAt.ToString("dd.MM.yyyy")} г.")
                 .SetFont(regularFont)
                 .SetFontSize(12)
                 .SetTextAlignment(TextAlignment.CENTER)
