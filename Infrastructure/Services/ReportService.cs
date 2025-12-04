@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Linq;
 using Application.DTOs.Input_DTO;
 using Application.DTOs.Output_DTO;
@@ -52,13 +53,13 @@ public class ReportService : IReportService
         _serviceScopeFactory = serviceScopeFactory;
         _environment = environment;
         _logger = logger;
-        
+
         ExcelPackage.License.SetNonCommercialPersonal("zatway");
 
         // Используем переменную окружения или путь по умолчанию
         var reportsPath = Environment.GetEnvironmentVariable("REPORTS_STORAGE_PATH");
-        _reportsDirectory = !string.IsNullOrWhiteSpace(reportsPath) 
-            ? reportsPath 
+        _reportsDirectory = !string.IsNullOrWhiteSpace(reportsPath)
+            ? reportsPath
             : Path.Combine(_environment.ContentRootPath, "ReportsStorage");
 
         if (!Directory.Exists(_reportsDirectory))
@@ -134,8 +135,8 @@ public class ReportService : IReportService
             reportConfigDict["StageIds"] = stageIdsToInclude;
         }
 
-        var finalReportConfig = reportConfigDict.Any() 
-            ? JsonSerializer.Serialize(reportConfigDict) 
+        var finalReportConfig = reportConfigDict.Any()
+            ? JsonSerializer.Serialize(reportConfigDict)
             : request.ReportConfig;
 
         var newReport = new Report
@@ -191,7 +192,7 @@ public class ReportService : IReportService
             .Include(r => r.GeneratedBy)
             .FirstOrDefaultAsync(r => r.ReportId == reportId);
 
-         if (report == null)
+        if (report == null)
         {
             _logger?.LogWarning("Отчёт с ID {ReportId} не найден для генерации.", reportId);
             return;
@@ -211,13 +212,13 @@ public class ReportService : IReportService
         {
             using var scope = serviceScopeFactory.CreateScope();
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-            
+
             await notificationService.CreateAndSendNotificationAsync(
                 report.GeneratedByUserId,
                 report.ProjectId,
                 $"Генерация отчета '{report.ReportType}' по проекту '{report.Project.Name}' началась.",
                 CancellationToken.None);
-            
+
             _logger.LogInformation("Уведомление о начале генерации отчета {ReportId} отправлено", reportId);
         }
         catch (Exception ex)
@@ -242,10 +243,10 @@ public class ReportService : IReportService
                     var configDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(report.ReportConfig);
                     config = new ReportConfig
                     {
-                        IncludeProgress = configDict?.ContainsKey("IncludeProgress") == true && 
-                            configDict["IncludeProgress"].ValueKind == JsonValueKind.True,
-                        IncludeDeadline = configDict?.ContainsKey("IncludeDeadline") == true && 
-                            configDict["IncludeDeadline"].ValueKind == JsonValueKind.True,
+                        IncludeProgress = configDict?.ContainsKey("IncludeProgress") == true &&
+                                          configDict["IncludeProgress"].ValueKind == JsonValueKind.True,
+                        IncludeDeadline = configDict?.ContainsKey("IncludeDeadline") == true &&
+                                          configDict["IncludeDeadline"].ValueKind == JsonValueKind.True,
                         StageIds = configDict?.ContainsKey("StageIds") == true
                             ? JsonSerializer.Deserialize<List<int>>(configDict["StageIds"].GetRawText())
                             : null
@@ -262,13 +263,15 @@ public class ReportService : IReportService
                 case ReportType.PdfAct:
                     _logger.LogDebug("Начало генерации PDF отчета {ReportId}", reportId);
                     fileBytes = GeneratePdfAct(report, config);
-                    _logger.LogDebug("PDF отчет {ReportId} успешно сгенерирован, размер: {Size} байт", reportId, fileBytes.Length);
+                    _logger.LogDebug("PDF отчет {ReportId} успешно сгенерирован, размер: {Size} байт", reportId,
+                        fileBytes.Length);
                     fileExtension = "pdf";
                     break;
                 case ReportType.ExcelKpi:
                     _logger.LogDebug("Начало генерации Excel отчета {ReportId}", reportId);
                     fileBytes = await GenerateExcelKpiAsync(report, config, context);
-                    _logger.LogDebug("Excel отчет {ReportId} успешно сгенерирован, размер: {Size} байт", reportId, fileBytes.Length);
+                    _logger.LogDebug("Excel отчет {ReportId} успешно сгенерирован, размер: {Size} байт", reportId,
+                        fileBytes.Length);
                     fileExtension = "xlsx";
                     break;
                 default:
@@ -299,13 +302,13 @@ public class ReportService : IReportService
             {
                 using var scope = serviceScopeFactory.CreateScope();
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                
+
                 await notificationService.CreateAndSendNotificationAsync(
                     report.GeneratedByUserId,
                     report.ProjectId,
                     $"Отчет '{report.ReportType}' по проекту '{report.Project.Name}' готов к скачиванию.",
                     CancellationToken.None);
-                
+
                 _logger.LogInformation("Уведомление о готовности отчета {ReportId} отправлено", reportId);
             }
             catch (Exception ex)
@@ -326,24 +329,25 @@ public class ReportService : IReportService
             {
                 using var scope = serviceScopeFactory.CreateScope();
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                
+
                 await notificationService.CreateAndSendNotificationAsync(
                     report.GeneratedByUserId,
                     report.ProjectId,
                     $"Ошибка генерации отчета '{report.ReportType}' по проекту '{report.Project.Name}': {ex.Message}",
                     CancellationToken.None);
-                
+
                 _logger.LogInformation("Уведомление об ошибке генерации отчета {ReportId} отправлено", reportId);
             }
             catch (Exception notifyEx)
             {
-                _logger.LogError(notifyEx, "Не удалось отправить уведомление об ошибке генерации отчета {ReportId}", reportId);
+                _logger.LogError(notifyEx, "Не удалось отправить уведомление об ошибке генерации отчета {ReportId}",
+                    reportId);
             }
 
-            _logger.LogError(ex, 
-                "Ошибка генерации отчёта {ReportId}: {Message}. Тип отчета: {ReportType}. StackTrace: {StackTrace}", 
-                reportId, 
-                ex.Message, 
+            _logger.LogError(ex,
+                "Ошибка генерации отчёта {ReportId}: {Message}. Тип отчета: {ReportType}. StackTrace: {StackTrace}",
+                reportId,
+                ex.Message,
                 report.ReportType,
                 ex.StackTrace);
         }
@@ -395,7 +399,8 @@ public class ReportService : IReportService
     {
         if (report.GeneratedBy == null)
         {
-            throw new InvalidOperationException($"Не удалось загрузить данные пользователя для отчета {report.ReportId}");
+            throw new InvalidOperationException(
+                $"Не удалось загрузить данные пользователя для отчета {report.ReportId}");
         }
 
         if (report.Project == null)
@@ -422,13 +427,13 @@ public class ReportService : IReportService
                 .SetTextAlignment(TextAlignment.CENTER)
                 .SetMarginTop(20)
                 .SetMarginBottom(5));
-            
+
             document.Add(new Paragraph($"№ {report.ReportId}")
                 .SetFont(boldFont)
                 .SetFontSize(14)
                 .SetTextAlignment(TextAlignment.CENTER)
                 .SetMarginBottom(5));
-            
+
             document.Add(new Paragraph($"от {report.GeneratedAt.ToString("dd.MM.yyyy")} г.")
                 .SetFont(regularFont)
                 .SetFontSize(12)
@@ -477,27 +482,29 @@ public class ReportService : IReportService
                 .SetPadding(8);
 
             table.AddHeaderCell(new Cell().Add(new Paragraph("№").SetFont(boldFont)).AddStyle(headerCellStyle));
-            table.AddHeaderCell(new Cell().Add(new Paragraph("Наименование этапа (работы)").SetFont(boldFont)).AddStyle(headerCellStyle));
+            table.AddHeaderCell(new Cell().Add(new Paragraph("Наименование этапа (работы)").SetFont(boldFont))
+                .AddStyle(headerCellStyle));
             table.AddHeaderCell(new Cell().Add(new Paragraph("Статус").SetFont(boldFont)).AddStyle(headerCellStyle));
-            table.AddHeaderCell(new Cell().Add(new Paragraph("Срок сдачи").SetFont(boldFont)).AddStyle(headerCellStyle));
+            table.AddHeaderCell(new Cell().Add(new Paragraph("Срок сдачи").SetFont(boldFont))
+                .AddStyle(headerCellStyle));
 
             // Данные этапов с фильтрацией по StageIds
             var stages = report.Project.Stages?.AsEnumerable() ?? Enumerable.Empty<Stage>();
-            
+
             if (config.StageIds != null && config.StageIds.Any())
             {
                 stages = stages.Where(s => config.StageIds.Contains(s.StageId));
             }
-            
+
             var stagesList = stages.OrderBy(s => s.StageId).ToList();
-            
+
             if (!stagesList.Any())
             {
-                _logger.LogWarning("Не найдено этапов для включения в PDF отчет {ReportId}. StageIds: {StageIds}", 
-                    report.ReportId, 
+                _logger.LogWarning("Не найдено этапов для включения в PDF отчет {ReportId}. StageIds: {StageIds}",
+                    report.ReportId,
                     config.StageIds != null ? string.Join(", ", config.StageIds) : "не указаны");
             }
-            
+
             int i = 1;
             foreach (var stage in stagesList)
             {
@@ -508,15 +515,16 @@ public class ReportService : IReportService
 
                 table.AddCell(new Cell().Add(new Paragraph(i.ToString())).AddStyle(cellStyle)
                     .SetTextAlignment(TextAlignment.CENTER));
-                
+
                 table.AddCell(new Cell().Add(new Paragraph(stage.Name)).AddStyle(cellStyle));
-                
+
                 table.AddCell(new Cell().Add(new Paragraph(stage.Status.ToString())).AddStyle(cellStyle)
                     .SetTextAlignment(TextAlignment.CENTER));
 
                 if (config.IncludeDeadline)
                 {
-                    table.AddCell(new Cell().Add(new Paragraph(stage.Deadline.ToString("dd.MM.yyyy"))).AddStyle(cellStyle)
+                    table.AddCell(new Cell().Add(new Paragraph(stage.Deadline.ToString("dd.MM.yyyy")))
+                        .AddStyle(cellStyle)
                         .SetTextAlignment(TextAlignment.CENTER));
                 }
                 else
@@ -531,12 +539,14 @@ public class ReportService : IReportService
             document.Add(table);
 
             // Заключение
-            document.Add(new Paragraph("Работы выполнены в полном объеме и соответствуют техническому заданию. Стороны претензий не имеют.")
-                .SetFont(regularFont)
-                .SetFontSize(12)
-                .SetFirstLineIndent(30)
-                .SetMarginTop(30)
-                .SetMarginBottom(50));
+            document.Add(
+                new Paragraph(
+                        "Работы выполнены в полном объеме и соответствуют техническому заданию. Стороны претензий не имеют.")
+                    .SetFont(regularFont)
+                    .SetFontSize(12)
+                    .SetFirstLineIndent(30)
+                    .SetMarginTop(30)
+                    .SetMarginBottom(50));
 
             // Подписи
             var signatureStyle = new Style()
@@ -548,7 +558,7 @@ public class ReportService : IReportService
                 .SetFontSize(12)
                 .SetMarginLeft(50)
                 .SetMarginBottom(40));
-            
+
             document.Add(new Paragraph("___________________ / (Подпись)")
                 .SetFont(regularFont)
                 .SetFontSize(11)
@@ -561,7 +571,7 @@ public class ReportService : IReportService
                 .SetMarginLeft(350)
                 .SetMarginTop(-60)
                 .SetMarginBottom(40));
-            
+
             document.Add(new Paragraph("___________________ / (Подпись)")
                 .SetFont(regularFont)
                 .SetFontSize(11)
@@ -570,127 +580,148 @@ public class ReportService : IReportService
 
         return ms.ToArray();
     }
- 
+
     /// <summary>
     /// Генерирует Excel-файл с отчетом по ключевым показателям проекта.
     /// </summary>
-    private async Task<byte[]> GenerateExcelKpiAsync(Report report, ReportConfig config, ProjectManagementDbContext context)
+    private async Task<byte[]> GenerateExcelKpiAsync(Report report, ReportConfig config,
+        ProjectManagementDbContext context)
     {
-        if (report.Project == null)
+        try
         {
-            throw new InvalidOperationException($"Не удалось загрузить данные проекта для отчета {report.ReportId}");
-        }
+            if (report.Project == null)
+            {
+                throw new InvalidOperationException(
+                    $"Не удалось загрузить данные проекта для отчета {report.ReportId}");
+            }
 
-        _logger.LogDebug("Начало генерации Excel отчета {ReportId}. ProjectId: {ProjectId}, StageIds: {StageIds}", 
-            report.ReportId, 
-            report.ProjectId,
-            config.StageIds != null ? string.Join(", ", config.StageIds) : "не указаны");
-
-        var stagesQuery = context.Stages
-            .AsNoTracking()
-            .Where(s => s.ProjectId == report.ProjectId);
-
-        // Фильтрация по StageIds, если указаны
-        if (config.StageIds != null && config.StageIds.Any())
-        {
-            _logger.LogDebug("Применяется фильтрация по StageIds: {StageIds}", string.Join(", ", config.StageIds));
-            stagesQuery = stagesQuery.Where(s => config.StageIds.Contains(s.StageId));
-        }
-
-        var stages = await stagesQuery
-            .OrderBy(s => s.StageId)
-            .Select(s => new { s.StageId, s.Name, s.ProgressPercent, s.Deadline, s.Status })
-            .ToListAsync();
-
-        _logger.LogDebug("Найдено этапов для Excel отчета {ReportId}: {Count}", report.ReportId, stages.Count);
-
-        if (!stages.Any())
-        {
-            _logger.LogWarning("Не найдено этапов для включения в Excel отчет {ReportId}. StageIds: {StageIds}", 
-                report.ReportId, 
+            _logger.LogInformation(
+                "Начало генерации Excel отчета {ReportId}. ProjectId: {ProjectId}, StageIds: {StageIds}",
+                report.ReportId,
+                report.ProjectId,
                 config.StageIds != null ? string.Join(", ", config.StageIds) : "не указаны");
-        }
 
-        _logger.LogDebug("Создание Excel пакета для отчета {ReportId}", report.ReportId);
-        using var package = new ExcelPackage();
-        var worksheet = package.Workbook.Worksheets.Add("KPI Summary");
+            var stagesQuery = context.Stages
+                .AsNoTracking()
+                .Where(s => s.ProjectId == report.ProjectId);
 
-        // --- 1. СТИЛИЗАЦИЯ (для красоты) ---
-        var headerStyle = worksheet.Workbook.Styles.CreateNamedStyle("HeaderStyle");
-        headerStyle.Style.Font.Bold = true;
-        headerStyle.Style.Fill.PatternType = ExcelFillStyle.Solid;
-        headerStyle.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightGray);
-        headerStyle.Style.Border.Top.Style = ExcelBorderStyle.Thin;
-        headerStyle.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
-        headerStyle.Style.Border.Left.Style = ExcelBorderStyle.Thin;
-        headerStyle.Style.Border.Right.Style = ExcelBorderStyle.Thin;
-        
-        // --- 2. ШАПКА ОТЧЕТА ---
-        worksheet.Cells["A1"].Value = "Отчет по ключевым показателям проекта (KPI)";
-        worksheet.Cells["A1:D1"].Merge = true;
-        worksheet.Cells["A1"].Style.Font.Size = 16;
-        worksheet.Cells["A1"].Style.Font.Bold = true;
-        worksheet.Cells["A1"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+            // Фильтрация по StageIds, если указаны
+            if (config.StageIds != null && config.StageIds.Any())
+            {
+                _logger.LogDebug("Применяется фильтрация по StageIds: {StageIds}", string.Join(", ", config.StageIds));
+                stagesQuery = stagesQuery.Where(s => config.StageIds.Contains(s.StageId));
+            }
 
-        worksheet.Cells["A3"].Value = "Проект:";
-        worksheet.Cells["B3"].Value = report.Project.Name;
-        worksheet.Cells["A4"].Value = "Дата генерации:";
-        worksheet.Cells["B4"].Value = report.GeneratedAt.ToShortDateString();
+            var stages = await stagesQuery
+                .OrderBy(s => s.StageId)
+                .Select(s => new { s.StageId, s.Name, s.ProgressPercent, s.Deadline, s.Status })
+                .ToListAsync();
 
-        // --- 3. ТАБЛИЦА ДАННЫХ ---
-        int startRow = 6;
-          int col = 1;
+            _logger.LogDebug("Найдено этапов для Excel отчета {ReportId}: {Count}", report.ReportId, stages.Count);
 
-        // Заголовки
-        worksheet.Cells[startRow, col++].Value = "ID";
-        worksheet.Cells[startRow, col++].Value = "Название этапа";
-        worksheet.Cells[startRow, col++].Value = "Статус";
+            if (!stages.Any())
+            {
+                _logger.LogWarning("Не найдено этапов для включения в Excel отчет {ReportId}. StageIds: {StageIds}",
+                    report.ReportId,
+                    config.StageIds != null ? string.Join(", ", config.StageIds) : "не указаны");
+            }
 
-        // 💡 Динамическое формирование заголовков на основе конфигурации
-        if (config.IncludeProgress)
-        {
-            worksheet.Cells[startRow, col++].Value = "Прогресс, %";
-        }
+            _logger.LogDebug("Создание Excel пакета для отчета {ReportId}", report.ReportId);
+            using var package = new ExcelPackage();
+            var worksheet = package.Workbook.Worksheets.Add("KPI Summary");
 
-        if (config.IncludeDeadline)
-        {
-            worksheet.Cells[startRow, col++].Value = "Плановая дата";
-        }
+            // --- 1. СТИЛИЗАЦИЯ (для красоты) ---
+            var headerStyle = worksheet.Workbook.Styles.CreateNamedStyle("HeaderStyle");
+            headerStyle.Style.Font.Bold = true;
+            headerStyle.Style.Fill.PatternType = ExcelFillStyle.Solid;
+            headerStyle.Style.Fill.BackgroundColor.SetColor(Color.LightGray);
+            headerStyle.Style.Border.Top.Style = ExcelBorderStyle.Thin;
+            headerStyle.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
+            headerStyle.Style.Border.Left.Style = ExcelBorderStyle.Thin;
+            headerStyle.Style.Border.Right.Style = ExcelBorderStyle.Thin;
 
-        // Применяем стиль к заголовкам
-        worksheet.Cells[startRow, 1, startRow, col - 1].StyleName = "HeaderStyle";
+            // --- 2. ШАПКА ОТЧЕТА ---
+            worksheet.Cells["A1"].Value = "Отчет по ключевым показателям проекта (KPI)";
+            worksheet.Cells["A1:D1"].Merge = true;
+            worksheet.Cells["A1"].Style.Font.Size = 16;
+            worksheet.Cells["A1"].Style.Font.Bold = true;
+            worksheet.Cells["A1"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
 
-        // Заполнение данными
-        int row = startRow + 1;
-        foreach (var stage in stages)
-        {
-            col = 1;
-            worksheet.Cells[row, col++].Value = stage.StageId;
-            worksheet.Cells[row, col++].Value = stage.Name;
-            worksheet.Cells[row, col++].Value = stage.Status.ToString();
+            worksheet.Cells["A3"].Value = "Проект:";
+            worksheet.Cells["B3"].Value = report.Project.Name;
+            worksheet.Cells["A4"].Value = "Дата генерации:";
+            worksheet.Cells["B4"].Value = report.GeneratedAt.ToString("dd.MM.yyyy");
 
+            // --- 3. ТАБЛИЦА ДАННЫХ ---
+            int startRow = 6;
+            int col = 1;
+
+            // Заголовки
+            worksheet.Cells[startRow, col++].Value = "ID";
+            worksheet.Cells[startRow, col++].Value = "Название этапа";
+            worksheet.Cells[startRow, col++].Value = "Статус";
+
+            // 💡 Динамическое формирование заголовков на основе конфигурации
             if (config.IncludeProgress)
             {
-                worksheet.Cells[row, col].Value = stage.ProgressPercent / 100.0;
-                worksheet.Cells[row, col++].Style.Numberformat.Format = "0.00%";
+                worksheet.Cells[startRow, col++].Value = "Прогресс, %";
             }
 
             if (config.IncludeDeadline)
             {
-                worksheet.Cells[row, col].Value = stage.Deadline;
-                worksheet.Cells[row, col++].Style.Numberformat.Format = "dd.mm.yyyy";
+                worksheet.Cells[startRow, col++].Value = "Плановая дата";
             }
 
-            row++;
+            // Применяем стиль к заголовкам
+            worksheet.Cells[startRow, 1, startRow, col - 1].StyleName = "HeaderStyle";
+
+            // Заполнение данными
+            int row = startRow + 1;
+            foreach (var stage in stages)
+            {
+                col = 1;
+                worksheet.Cells[row, col++].Value = stage.StageId;
+                worksheet.Cells[row, col++].Value = stage.Name;
+                worksheet.Cells[row, col++].Value = stage.Status.ToString();
+
+                if (config.IncludeProgress)
+                {
+                    worksheet.Cells[row, col].Value = stage.ProgressPercent / 100.0;
+                    worksheet.Cells[row, col++].Style.Numberformat.Format = "0.00%";
+                }
+
+                if (config.IncludeDeadline)
+                {
+                    worksheet.Cells[row, col].Value = stage.Deadline;
+                    worksheet.Cells[row, col++].Style.Numberformat.Format = "dd.mm.yyyy";
+                }
+
+                row++;
+            }
+
+            if (worksheet.Dimension != null)
+                worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+            else
+            {
+                _logger.LogWarning("Лист пуст для отчета {ReportId}, пропускаем AutoFitColumns", report.ReportId);
+            }
+
+            _logger.LogInformation("Excel пакет для отчета {ReportId} подготовлен, получение байтов", report.ReportId);
+            var result = package.GetAsByteArray();
+            _logger.LogInformation("Excel отчет {ReportId} успешно сгенерирован, размер: {Size} байт", report.ReportId,
+                result.Length);
+
+            return result;
         }
-
-        worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
-
-        _logger.LogDebug("Excel пакет для отчета {ReportId} подготовлен, получение байтов", report.ReportId);
-        var result = package.GetAsByteArray();
-        _logger.LogDebug("Excel отчет {ReportId} успешно сгенерирован, размер: {Size} байт", report.ReportId, result.Length);
-        
-        return result;
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Ошибка при генерации Excel отчета {ReportId}: {Message}. StackTrace: {StackTrace}",
+                report.ReportId,
+                ex.Message,
+                ex.StackTrace);
+            throw;
+        }
     }
 
     /// <summary>
