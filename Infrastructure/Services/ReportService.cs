@@ -168,7 +168,15 @@ public class ReportService : IReportService
             _logger.LogWarning(ex, "Не удалось отправить уведомление о создании отчета {ReportId}", newReport.ReportId);
         }
 
-        _ = Task.Run(async () => { await GenerateAndSaveReport(newReport.ReportId, _serviceScopeFactory); });
+        // Локально генерируем отчет в фоне, а в проде — синхронно, чтобы избежать потери фоновой задачи
+        if (_environment.IsDevelopment())
+        {
+            _ = Task.Run(async () => { await GenerateAndSaveReport(newReport.ReportId, _serviceScopeFactory); });
+        }
+        else
+        {
+            await GenerateAndSaveReport(newReport.ReportId, _serviceScopeFactory);
+        }
 
         return new ReportResponse
         {
