@@ -2,7 +2,6 @@
 FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS base
 WORKDIR /app
 EXPOSE 8080
-# Fly.io требует именно 8080 порт (внутри контейнера)
 ENV ASPNETCORE_URLS=http://+:8080
 # Отключаем приглашение к телеметрии
 ENV DOTNET_NOLOGO=true

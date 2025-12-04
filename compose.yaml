@@ -4,10 +4,21 @@
     build:
       context: .
       dockerfile: Api/Dockerfile
+    volumes:
+      - reports-storage:/app/ReportsStorage
+    environment:
+      - REPORTS_STORAGE_PATH=/app/ReportsStorage
 
   api-1:
     image: api-1
     build:
       context: .
       dockerfile: Api/Dockerfile
+    volumes:
+      - reports-storage:/app/ReportsStorage
+    environment:
+      - REPORTS_STORAGE_PATH=/app/ReportsStorage
+
+volumes:
+  reports-storage:
 

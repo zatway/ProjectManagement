@@ -56,11 +56,20 @@ public class ReportService : IReportService
         
         ExcelPackage.License.SetNonCommercialPersonal("zatway");
 
-        _reportsDirectory = Path.Combine(_environment.ContentRootPath, "ReportsStorage");
+        // Используем переменную окружения или путь по умолчанию
+        var reportsPath = Environment.GetEnvironmentVariable("REPORTS_STORAGE_PATH");
+        _reportsDirectory = !string.IsNullOrWhiteSpace(reportsPath) 
+            ? reportsPath 
+            : Path.Combine(_environment.ContentRootPath, "ReportsStorage");
 
         if (!Directory.Exists(_reportsDirectory))
         {
             Directory.CreateDirectory(_reportsDirectory);
+            _logger.LogInformation("Создана директория для отчетов: {ReportsDirectory}", _reportsDirectory);
+        }
+        else
+        {
+            _logger.LogDebug("Директория для отчетов уже существует: {ReportsDirectory}", _reportsDirectory);
         }
     }
 
