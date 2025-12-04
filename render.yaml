@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: project-management-api
+    env: docker
+    dockerfilePath: ./Api/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: REPORTS_STORAGE_PATH
+        value: /app/ReportsStorage
+      - key: ASPNETCORE_URLS
+        value: http://+:8080
+    healthCheckPath: /swagger
+    autoDeploy: true
+
