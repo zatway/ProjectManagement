@@ -84,7 +84,7 @@ public class ProjectService : IProjectService
         var oldStatus = project.Status;
         var oldName = project.Name;
 
-        if (request.Status is not null)
+        if (!string.IsNullOrWhiteSpace(request.Status))
         {
             if (Enum.TryParse<ProjectStatus>(request.Status, true, out var newStatus))
             {
